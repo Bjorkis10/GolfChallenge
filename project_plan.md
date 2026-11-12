@@ -3,10 +3,11 @@
 > **Single Source of Truth:** This document tracks milestones, acceptance criteria, verification status, blockers, and session handoffs. Always read [GEMINI.md](./GEMINI.md) and this file at the start of every session.
 
 ## Project Status Overview
-- **Current Phase:** Milestone 1 Complete — Ready for **Milestone 2**
+- **Current Phase:** Milestone 2 Complete — Ready for **Milestone 3**
 - **Completed Milestones:**
   - Milestone 0 (Planning & Architecture Docs)
   - Milestone 1 (App Foundation, Mat Settings, Visual Direction & Responsive Shell)
+  - Milestone 2 (Distance Rounds Game, Session Storage, ConfigKey & Personal Bests)
 - **Active Blockers:** None
 
 ---
@@ -51,7 +52,7 @@
 ---
 
 ### Milestone 2: Distance Rounds Game, Session Storage, ConfigKey & Personal Bests
-- **Status:** PENDING (Next)
+- **Status:** COMPLETED (2026-11-12)
 - **Scope:**
   - Implement `src/domain/types.ts`, `src/domain/configKey.ts`, `src/domain/personalBests.ts`, and `src/domain/distanceRounds.ts`:
     - Setup validation ensuring all challenge distances are within `0.5m` and `maxUsableDistanceMetres` (`<= 3.0m`).
@@ -65,11 +66,16 @@
   - **Post-Final-Putt Undo Rule:** Undo immediately after the final putt must reopen the session and update the saved result and any derived personal best correctly, without duplicate history entries.
   - Comprehensive Vitest tests for `distanceRounds`, `configKey`, `personalBests`, session recovery, and post-completion undo.
   - Browser verification of the complete Distance Rounds flow (setup, validation against usable mat distance, play, miss tagging, undo during play and after final putt, refresh auto-resume, abandon, and summary PB display).
+- **Verification Record:**
+  - `npm run typecheck` — Passed with zero errors (`tsc --noEmit`).
+  - `npm test` — Passed (`3` test files, `17` tests covering `matSettings`, `distanceRounds`, `configKey` equivalence, `personalBests`, session recovery, and post-final-putt Undo reopening/updating history and PB without duplicates).
+  - `npm run build` — Passed (`tsc -b && vite build`).
+  - Browser inspection on `http://localhost:5173/` across desktop (`1280x800`) and mobile (`390x844`) viewports verified the "Available" Distance Rounds badge alongside "Not yet available" Putting Ladder & Pace Control cards, usable mat distance (`2.6m`) validation rejecting `2.8m`, setup explanation of `1 point per made putt`, single-tap Made/Missed logging with optional non-blocking miss details (`Left` + `Short`), mid-session Undo, page reload auto-resume, post-final-putt Undo reopening Putt 6 of 6 and updating the saved benchmark from `5/6` to `4/6` with `history.length === 1`, comparable Personal Best improvement (`+2 pts` on `6/6`), and Abandon Session confirmation.
 
 ---
 
 ### Milestone 3: Putting Ladder Game
-- **Status:** PENDING
+- **Status:** PENDING (Next)
 - **Scope:**
   - Implement `src/domain/puttingLadder.ts`:
     - Advance 1 distance rung on `Made`, stay at current distance rung on `Missed`.
@@ -148,3 +154,16 @@
   - Manual/untested in live browser: Simulated `QuotaExceededError` during live browser backup (verified via deterministic unit test in `src/storage/settingsStorage.test.ts`).
 - **Known issues or blockers:** None.
 - **Next exact task:** Implement **Milestone 2** (Distance Rounds game engine, session & history persistence, `configKey` & personal-best calculation, post-final-putt Undo reopening/updating history without duplicates, setup/play/summary UI, and browser verification).
+
+
+### Session 3 (2026-11-12) — Milestone 2 Implementation
+- **What is finished:**
+  - Implemented `src/domain/types.ts`, `src/domain/configKey.ts`, `src/domain/personalBests.ts`, and `src/domain/distanceRounds.ts` with distance validation against `maxUsableDistanceMetres` (`0.5m <= d <= maxUsableDistanceMetres <= 3.0m`), configurable putts per distance (`3 | 5 | 10`) and rounds (`1 | 2 | 3`), 1 point per made putt, single-tap Made/Missed logging with optional non-blocking miss details (`direction` and `distance`), duplicate-submission protection, Undo (including post-final-putt reopen), and comparable Personal Best evaluation.
+  - Extended `src/storage/settingsStorage.ts` to persist `activeSession` and `history` (`CompletedSessionRecord[]`) while preserving existing mat settings and all non-destructive corruption/backup safeguards.
+  - Built `src/components/DistanceRoundsFlow.tsx` and updated `ChallengeCards.tsx`, `App.tsx`, and `components.css` (leaving Putting Ladder and Pace Control clearly marked as not yet available).
+  - Added unit tests in `src/domain/distanceRounds.test.ts` and `src/storage/settingsStorage.test.ts`.
+- **What was actually verified:**
+  - Automated CLI checks: `npm run typecheck`, `npm test` (3 test files, 17/17 tests passing), and `npm run build`.
+  - Live browser checks on `http://localhost:5173/` across desktop (`1280x800`) and mobile (`390x844`) viewports: verified Distance Rounds setup validation against `2.6m` usable mat limit, active logging, optional non-blocking miss details (`Left` + `Short`), mid-session Undo, reload auto-resume, post-final-putt Undo reopening Putt 6 of 6 and updating the saved benchmark from `5/6` to `4/6` without duplicate history entries (`history.length === 1`), comparable Personal Best improvement (`+2 pts` on `6/6`), and Abandon Session flow.
+- **Known issues or blockers:** None.
+- **Next exact task:** Implement **Milestone 3** (Putting Ladder game engine, setup/active/summary views, post-final-putt Undo reopening/updating history and PB without duplicates, unit tests, and browser verification).

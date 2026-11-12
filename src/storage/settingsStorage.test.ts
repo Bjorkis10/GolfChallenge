@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import {
+  createDistanceRoundsSession,
+  recordDistanceRoundsPutt,
+  undoLastDistanceRoundsPutt,
+  validateDistanceRoundsSetup,
+} from '../domain/distanceRounds';
 import { DEFAULT_MAT_SETTINGS, MatSettings } from '../domain/matSettings';
+import { getPersonalBestForConfigKey } from '../domain/personalBests';
 import {
   KeyValueStorageLike,
   STORAGE_BACKUP_PREFIX,
@@ -37,6 +44,8 @@ describe('SettingsStorageService', () => {
     const initial = service.loadSettings(fixedNow);
     expect(initial.health).toBe('ok');
     expect(initial.settings).toEqual(DEFAULT_MAT_SETTINGS);
+    expect(initial.activeSession).toBeNull();
+    expect(initial.history).toEqual([]);
 
     const customSettings: MatSettings = {
       unit: 'm',
@@ -122,5 +131,69 @@ describe('SettingsStorageService', () => {
     const afterReset = service.forceResetCorruptedStorage(fixedNow);
     expect(afterReset.health).toBe('ok');
     expect(mockStorage.getItem(STORAGE_KEY_V1)).not.toBe(unreadablePayload);
+  });
+
+  it('persists activeSession for auto-resume across reloads and syncs post-final-putt Undo with history without duplicates', () => {
+    const mockStorage = new InMemoryTestStorage();
+    const service = new SettingsStorageService(mockStorage);
+    service.loadSettings(fixedNow);
+
+    const config = validateDistanceRoundsSetup(
+      { distancesMetres: [1.0], puttsPerDistance: 3, rounds: 1 },
+      3.0
+    ).config!;
+
+    let session = createDistanceRoundsSession(config, {
+      sessionId: 'dr_session_101',
+      startedAt: '2026-11-12T20:00:00.000Z',
+    });
+    session = recordDistanceRoundsPutt(session, 'made');
+    session = recordDistanceRoundsPutt(session, 'made');
+    service.saveActiveSession(session, fixedNow);
+
+    // Simulate page refresh with a new service instance
+    const reloadedService = new SettingsStorageService(mockStorage);
+    const reloadedState = reloadedService.loadSettings(fixedNow);
+    expect(reloadedState.activeSession?.sessionId).toBe('dr_session_101');
+    expect(reloadedState.activeSession?.status).toBe('in_progress');
+    expect(reloadedState.activeSession?.attempts).toHaveLength(2);
+    expect(reloadedState.history).toHaveLength(0);
+
+    // Log final putt as 'made' (3/3 = 3 pts)
+    let completed = recordDistanceRoundsPutt(
+      reloadedState.activeSession!,
+      'made',
+      { recordedAt: '2026-11-12T20:01:00.000Z' }
+    );
+    const afterComplete = reloadedService.saveActiveSession(completed, fixedNow);
+    expect(afterComplete.history).toHaveLength(1);
+    expect(afterComplete.history[0].summary.totalPoints).toBe(3);
+    expect(
+      getPersonalBestForConfigKey(afterComplete.history, completed.configKey)
+        ?.summary.totalPoints
+    ).toBe(3);
+
+    // Trigger post-final-putt Undo to reopen session
+    const reopened = undoLastDistanceRoundsPutt(completed);
+    const afterUndo = reloadedService.saveActiveSession(reopened, fixedNow);
+    expect(afterUndo.activeSession?.status).toBe('in_progress');
+    expect(afterUndo.activeSession?.attempts).toHaveLength(2);
+    expect(afterUndo.history).toHaveLength(0);
+    expect(
+      getPersonalBestForConfigKey(afterUndo.history, completed.configKey)
+    ).toBeNull();
+
+    // Log final putt as 'missed' (2/3 = 2 pts) and verify updated history and PB without duplicates
+    completed = recordDistanceRoundsPutt(reopened, 'missed', {
+      recordedAt: '2026-11-12T20:02:00.000Z',
+    });
+    const afterRecomplete = reloadedService.saveActiveSession(completed, fixedNow);
+    expect(afterRecomplete.history).toHaveLength(1);
+    expect(afterRecomplete.history[0].sessionId).toBe('dr_session_101');
+    expect(afterRecomplete.history[0].summary.totalPoints).toBe(2);
+    expect(
+      getPersonalBestForConfigKey(afterRecomplete.history, completed.configKey)
+        ?.summary.totalPoints
+    ).toBe(2);
   });
 });

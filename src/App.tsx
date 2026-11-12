@@ -1,20 +1,37 @@
 import { useMemo, useState } from 'react';
 import { AppHeader, ShellTab } from './components/AppHeader';
 import { ChallengeCards } from './components/ChallengeCards';
+import { DistanceRoundsFlow } from './components/DistanceRoundsFlow';
 import { MatSettingsPanel } from './components/MatSettingsPanel';
 import { StorageBanner } from './components/StorageBanner';
 import { MatSettings } from './domain/matSettings';
 import {
+  ActiveSessionState,
+  CompletedSessionRecord,
+} from './domain/types';
+import {
   SettingsStorageService,
   StorageHealthMode,
 } from './storage/settingsStorage';
+
+type ChallengesSubView = 'overview' | 'distance_rounds';
 
 export function App() {
   const storageService = useMemo(() => new SettingsStorageService(), []);
   const initialLoad = useMemo(() => storageService.loadSettings(), [storageService]);
 
   const [activeTab, setActiveTab] = useState<ShellTab>('challenges');
+  // Auto-resume into Distance Rounds flow if an active or just-completed session is present on load
+  const [challengesView, setChallengesView] = useState<ChallengesSubView>(() =>
+    initialLoad.activeSession ? 'distance_rounds' : 'overview'
+  );
   const [settings, setSettings] = useState<MatSettings>(initialLoad.settings);
+  const [activeSession, setActiveSession] = useState<ActiveSessionState | null>(
+    initialLoad.activeSession
+  );
+  const [history, setHistory] = useState<readonly CompletedSessionRecord[]>(
+    initialLoad.history
+  );
   const [storageHealth, setStorageHealth] = useState<StorageHealthMode>(
     initialLoad.health
   );
@@ -33,11 +50,31 @@ export function App() {
     };
   };
 
+  const handleUpdateSession = (nextSession: ActiveSessionState | null) => {
+    const result = storageService.saveActiveSession(nextSession);
+    setActiveSession(result.activeSession);
+    setHistory(result.history);
+    setStorageHealth(result.health);
+    setStorageMessage(result.message);
+  };
+
+  const handleAbandonSession = () => {
+    const result = storageService.abandonActiveSession();
+    setActiveSession(result.activeSession);
+    setHistory(result.history);
+    setStorageHealth(result.health);
+    setStorageMessage(result.message);
+    setChallengesView('overview');
+  };
+
   const handleResetCorruptedStorage = () => {
     const resetState = storageService.forceResetCorruptedStorage();
     setSettings(resetState.settings);
+    setActiveSession(resetState.activeSession);
+    setHistory(resetState.history);
     setStorageHealth(resetState.health);
     setStorageMessage(resetState.message);
+    setChallengesView('overview');
   };
 
   return (
@@ -56,10 +93,25 @@ export function App() {
 
       <main>
         {activeTab === 'challenges' ? (
-          <ChallengeCards
-            settings={settings}
-            onOpenSettings={() => setActiveTab('settings')}
-          />
+          challengesView === 'distance_rounds' ? (
+            <DistanceRoundsFlow
+              key={`${settings.maxUsableDistanceMetres}-${settings.defaultDistancesMetres.join(',')}`}
+              settings={settings}
+              activeSession={activeSession}
+              history={history}
+              onUpdateSession={handleUpdateSession}
+              onAbandonSession={handleAbandonSession}
+              onBackToChallenges={() => setChallengesView('overview')}
+            />
+          ) : (
+            <ChallengeCards
+              settings={settings}
+              activeSession={activeSession}
+              history={history}
+              onOpenSettings={() => setActiveTab('settings')}
+              onOpenDistanceRounds={() => setChallengesView('distance_rounds')}
+            />
+          )
         ) : (
           <MatSettingsPanel
             key={`${settings.maxUsableDistanceMetres}-${settings.defaultDistancesMetres.join(',')}`}
@@ -71,9 +123,9 @@ export function App() {
 
       <footer className="app-footer">
         <p style={{ marginBottom: 0 }}>
-          <strong>Local Practice Storage:</strong> Settings and future session history are
-          stored locally in this browser. Clearing site data removes local data—JSON export
-          backup will be added alongside session history.
+          <strong>Local Practice Storage:</strong> Settings, active sessions, and completed
+          session history are stored locally in this browser. Clearing site data removes
+          local data—JSON export backup will be added in Milestone 5.
         </p>
         <p style={{ marginBottom: 0 }}>
           Practice scores track personal consistency on your home mat and are not validated

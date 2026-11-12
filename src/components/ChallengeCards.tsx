@@ -1,11 +1,18 @@
 import { formatMetres, MatSettings } from '../domain/matSettings';
+import {
+  ActiveSessionState,
+  CompletedSessionRecord,
+} from '../domain/types';
 
 interface ChallengeCardsProps {
   readonly settings: MatSettings;
+  readonly activeSession: ActiveSessionState | null;
+  readonly history: readonly CompletedSessionRecord[];
   readonly onOpenSettings: () => void;
+  readonly onOpenDistanceRounds: () => void;
 }
 
-interface ChallengePreviewDefinition {
+interface UnavailableChallengeDefinition {
   readonly id: string;
   readonly title: string;
   readonly milestoneLabel: string;
@@ -14,20 +21,7 @@ interface ChallengePreviewDefinition {
   readonly inputFormat: string;
 }
 
-const CHALLENGE_PREVIEWS: readonly ChallengePreviewDefinition[] = [
-  {
-    id: 'distance-rounds',
-    title: 'Distance Rounds',
-    milestoneLabel: 'Not yet available (Milestone 2)',
-    summary:
-      'Hit a fixed number of putts from each configured mat distance to track make rate across your usable putting range.',
-    rules: [
-      'Uses your configured mat distances (all validated within your usable distance up to 3.0m).',
-      '1 point per made putt, with makes, attempts, and make percentage reported per distance.',
-      'Default single-tap Made / Missed logging with optional direction and distance miss tags.',
-    ],
-    inputFormat: 'Primary input: Made / Missed',
-  },
+const UNAVAILABLE_CHALLENGES: readonly UnavailableChallengeDefinition[] = [
   {
     id: 'putting-ladder',
     title: 'Putting Ladder',
@@ -56,10 +50,20 @@ const CHALLENGE_PREVIEWS: readonly ChallengePreviewDefinition[] = [
   },
 ];
 
-export function ChallengeCards({ settings, onOpenSettings }: ChallengeCardsProps) {
+export function ChallengeCards({
+  settings,
+  activeSession,
+  history,
+  onOpenSettings,
+  onOpenDistanceRounds,
+}: ChallengeCardsProps) {
   const formattedDistances = settings.defaultDistancesMetres
     .map((d) => formatMetres(d))
     .join(', ');
+
+  const distanceRoundsSessions = history.filter(
+    (item) => item.mode === 'distance_rounds'
+  );
 
   return (
     <section
@@ -70,8 +74,8 @@ export function ChallengeCards({ settings, onOpenSettings }: ChallengeCardsProps
       <div className="section-header">
         <h2 className="section-header__title">Practice Challenges</h2>
         <p className="section-header__lead">
-          Configure your 3.0m mat’s usable putting distance first. Interactive challenge
-          logging unlocks starting in Milestone 2.
+          Select an available putting challenge below, or adjust your 3.0m mat’s usable
+          putting distance and default marks.
         </p>
       </div>
 
@@ -94,7 +98,64 @@ export function ChallengeCards({ settings, onOpenSettings }: ChallengeCardsProps
       </div>
 
       <div className="challenge-grid" style={{ marginTop: 'var(--space-4)' }}>
-        {CHALLENGE_PREVIEWS.map((challenge) => (
+        {/* Distance Rounds (Available in Milestone 2) */}
+        <article className="challenge-card challenge-card--available">
+          <div className="challenge-card__header">
+            <h3 className="challenge-card__title">Distance Rounds</h3>
+            <span className="badge-available" aria-label="Availability status">
+              <span aria-hidden="true">●</span>
+              Available
+            </span>
+          </div>
+
+          <p className="challenge-card__description">
+            Hit a fixed number of putts (3, 5, or 10) from each configured mat distance
+            across 1 to 3 rounds to measure make rate across your usable putting range.
+          </p>
+
+          <ul className="challenge-card__rules">
+            <li>
+              Uses your configured mat distances (all validated within your usable distance
+              up to 3.0m).
+            </li>
+            <li>
+              1 point per made putt, with makes, attempts, and make percentage reported per
+              distance and overall.
+            </li>
+            <li>
+              Default single-tap Made / Missed logging with optional non-blocking direction
+              and distance miss tags.
+            </li>
+          </ul>
+
+          <div className="challenge-card__footer">
+            <span>Primary input: Made / Missed</span>
+            <span>
+              {distanceRoundsSessions.length === 0
+                ? 'No completed sessions yet'
+                : `${distanceRoundsSessions.length} completed ${
+                    distanceRoundsSessions.length === 1 ? 'session' : 'sessions'
+                  }`}
+            </span>
+          </div>
+
+          <div className="challenge-card__actions">
+            <button
+              type="button"
+              className="btn btn--primary btn--large-action"
+              onClick={onOpenDistanceRounds}
+            >
+              {activeSession
+                ? activeSession.status === 'completed'
+                  ? 'View Completed Session Summary'
+                  : `Resume Active Session (${activeSession.attempts.length} putts logged)`
+                : 'Configure & Start Distance Rounds'}
+            </button>
+          </div>
+        </article>
+
+        {/* Putting Ladder & Pace Control (Not yet available in Milestone 2) */}
+        {UNAVAILABLE_CHALLENGES.map((challenge) => (
           <article key={challenge.id} className="challenge-card">
             <div className="challenge-card__header">
               <h3 className="challenge-card__title">{challenge.title}</h3>
