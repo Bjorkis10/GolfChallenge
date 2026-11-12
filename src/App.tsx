@@ -3,6 +3,8 @@ import { AppHeader, ShellTab } from './components/AppHeader';
 import { ChallengeCards } from './components/ChallengeCards';
 import { DistanceRoundsFlow } from './components/DistanceRoundsFlow';
 import { MatSettingsPanel } from './components/MatSettingsPanel';
+import { PaceControlFlow } from './components/PaceControlFlow';
+import { PuttingLadderFlow } from './components/PuttingLadderFlow';
 import { StorageBanner } from './components/StorageBanner';
 import { MatSettings } from './domain/matSettings';
 import {
@@ -14,16 +16,16 @@ import {
   StorageHealthMode,
 } from './storage/settingsStorage';
 
-type ChallengesSubView = 'overview' | 'distance_rounds';
+type ChallengesSubView = 'overview' | 'distance_rounds' | 'putting_ladder' | 'pace_control';
 
 export function App() {
   const storageService = useMemo(() => new SettingsStorageService(), []);
   const initialLoad = useMemo(() => storageService.loadSettings(), [storageService]);
 
   const [activeTab, setActiveTab] = useState<ShellTab>('challenges');
-  // Auto-resume into Distance Rounds flow if an active or just-completed session is present on load
+  // Auto-resume into the active challenge flow if an active or just-completed session is present on load
   const [challengesView, setChallengesView] = useState<ChallengesSubView>(() =>
-    initialLoad.activeSession ? 'distance_rounds' : 'overview'
+    initialLoad.activeSession ? initialLoad.activeSession.mode : 'overview'
   );
   const [settings, setSettings] = useState<MatSettings>(initialLoad.settings);
   const [activeSession, setActiveSession] = useState<ActiveSessionState | null>(
@@ -77,6 +79,20 @@ export function App() {
     setChallengesView('overview');
   };
 
+  const activeDrSession =
+    activeSession && activeSession.mode === 'distance_rounds'
+      ? activeSession
+      : null;
+  const activeLadderSession =
+    activeSession && activeSession.mode === 'putting_ladder'
+      ? activeSession
+      : null;
+
+  const activePaceSession =
+    activeSession && activeSession.mode === 'pace_control'
+      ? activeSession
+      : null;
+
   return (
     <div className="app-shell">
       <AppHeader
@@ -95,9 +111,29 @@ export function App() {
         {activeTab === 'challenges' ? (
           challengesView === 'distance_rounds' ? (
             <DistanceRoundsFlow
-              key={`${settings.maxUsableDistanceMetres}-${settings.defaultDistancesMetres.join(',')}`}
+              key={`dr-${settings.maxUsableDistanceMetres}-${settings.defaultDistancesMetres.join(',')}`}
               settings={settings}
-              activeSession={activeSession}
+              activeSession={activeDrSession}
+              history={history}
+              onUpdateSession={handleUpdateSession}
+              onAbandonSession={handleAbandonSession}
+              onBackToChallenges={() => setChallengesView('overview')}
+            />
+          ) : challengesView === 'putting_ladder' ? (
+            <PuttingLadderFlow
+              key={`pl-${settings.maxUsableDistanceMetres}-${settings.defaultDistancesMetres.join(',')}`}
+              settings={settings}
+              activeSession={activeLadderSession}
+              history={history}
+              onUpdateSession={handleUpdateSession}
+              onAbandonSession={handleAbandonSession}
+              onBackToChallenges={() => setChallengesView('overview')}
+            />
+          ) : challengesView === 'pace_control' ? (
+            <PaceControlFlow
+              key={`pc-${settings.maxUsableDistanceMetres}-${settings.defaultDistancesMetres.join(',')}`}
+              settings={settings}
+              activeSession={activePaceSession}
               history={history}
               onUpdateSession={handleUpdateSession}
               onAbandonSession={handleAbandonSession}
@@ -110,6 +146,8 @@ export function App() {
               history={history}
               onOpenSettings={() => setActiveTab('settings')}
               onOpenDistanceRounds={() => setChallengesView('distance_rounds')}
+              onOpenPuttingLadder={() => setChallengesView('putting_ladder')}
+              onOpenPaceControl={() => setChallengesView('pace_control')}
             />
           )
         ) : (

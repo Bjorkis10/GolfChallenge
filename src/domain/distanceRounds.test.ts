@@ -219,7 +219,7 @@ describe('Distance Rounds gameplay, miss tagging, duplicate protection, and Undo
     const priorRecord = buildCompletedDistanceRoundsRecord(priorSession);
 
     let history = upsertCompletedSession([], priorRecord);
-    expect(getPersonalBestForConfigKey(history, shortConfigKey(shortConfig))?.summary.totalPoints).toBe(2);
+    expect(drPoints(getPersonalBestForConfigKey(history, shortConfigKey(shortConfig)))).toBe(2);
 
     // Current session: user accidentally taps Made on final putt for 3/3 (3 pts)
     let active = createDistanceRoundsSession(shortConfig, {
@@ -241,7 +241,7 @@ describe('Distance Rounds gameplay, miss tagging, duplicate protection, and Undo
       'current_session'
     );
     expect(
-      getPersonalBestForConfigKey(history, active.configKey)?.summary.totalPoints
+      drPoints(getPersonalBestForConfigKey(history, active.configKey))
     ).toBe(3);
 
     // User immediately triggers Undo after final putt!
@@ -257,7 +257,7 @@ describe('Distance Rounds gameplay, miss tagging, duplicate protection, and Undo
       'prior_session'
     );
     expect(
-      getPersonalBestForConfigKey(history, active.configKey)?.summary.totalPoints
+      drPoints(getPersonalBestForConfigKey(history, active.configKey))
     ).toBe(2);
 
     // User now logs the true final putt outcome ('missed') -> 2/3 (2 pts)
@@ -274,15 +274,23 @@ describe('Distance Rounds gameplay, miss tagging, duplicate protection, and Undo
       history.filter((r) => r.sessionId === 'current_session')
     ).toHaveLength(1);
     expect(
-      history.find((r) => r.sessionId === 'current_session')?.summary.totalPoints
+      drPoints(history.find((r) => r.sessionId === 'current_session') ?? null)
     ).toBe(2);
 
     const pbEval = evaluatePersonalBestForSession(history, updatedCompletedRecord);
     expect(pbEval.status).toBe('tied_personal_best');
-    expect(pbEval.bestRecord.summary.totalPoints).toBe(2);
+    expect(drPoints(pbEval.bestRecord)).toBe(2);
   });
 });
 
 function shortConfigKey(config: Parameters<typeof getConfigKey>[0]): string {
   return getConfigKey(config);
+}
+
+function drPoints(
+  record: ReturnType<typeof getPersonalBestForConfigKey>
+): number | null {
+  return record && record.mode === 'distance_rounds'
+    ? record.summary.totalPoints
+    : null;
 }

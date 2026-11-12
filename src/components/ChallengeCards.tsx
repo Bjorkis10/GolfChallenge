@@ -10,45 +10,9 @@ interface ChallengeCardsProps {
   readonly history: readonly CompletedSessionRecord[];
   readonly onOpenSettings: () => void;
   readonly onOpenDistanceRounds: () => void;
+  readonly onOpenPuttingLadder: () => void;
+  readonly onOpenPaceControl: () => void;
 }
-
-interface UnavailableChallengeDefinition {
-  readonly id: string;
-  readonly title: string;
-  readonly milestoneLabel: string;
-  readonly summary: string;
-  readonly rules: readonly string[];
-  readonly inputFormat: string;
-}
-
-const UNAVAILABLE_CHALLENGES: readonly UnavailableChallengeDefinition[] = [
-  {
-    id: 'putting-ladder',
-    title: 'Putting Ladder',
-    milestoneLabel: 'Not yet available (Milestone 3)',
-    summary:
-      'Climb from your shortest mark to your longest usable mat distance within a fixed attempt budget.',
-    rules: [
-      'Advance to the next distance after a make; stay at the current distance after a miss.',
-      'Fixed attempt budget (e.g., 15 putts) with clear completion upon making the final distance.',
-      'Supports single-step Undo, auto-resume on refresh, and comparable personal bests.',
-    ],
-    inputFormat: 'Primary input: Made / Missed',
-  },
-  {
-    id: 'pace-control',
-    title: 'Pace Control',
-    milestoneLabel: 'Not yet available (Milestone 4)',
-    summary:
-      'Mark a physical target zone on your 3.0m mat and practice stopping the ball inside the zone.',
-    rules: [
-      'Record each putt as Short, In Zone, or Long.',
-      '1 point for each ball finishing inside the marked target zone.',
-      'Summarizes short/in-zone/long dispersion across each target distance.',
-    ],
-    inputFormat: 'Primary input: Short / In Zone / Long',
-  },
-];
 
 export function ChallengeCards({
   settings,
@@ -56,6 +20,8 @@ export function ChallengeCards({
   history,
   onOpenSettings,
   onOpenDistanceRounds,
+  onOpenPuttingLadder,
+  onOpenPaceControl,
 }: ChallengeCardsProps) {
   const formattedDistances = settings.defaultDistancesMetres
     .map((d) => formatMetres(d))
@@ -64,6 +30,26 @@ export function ChallengeCards({
   const distanceRoundsSessions = history.filter(
     (item) => item.mode === 'distance_rounds'
   );
+  const puttingLadderSessions = history.filter(
+    (item) => item.mode === 'putting_ladder'
+  );
+
+  const paceControlSessions = history.filter(
+    (item) => item.mode === 'pace_control'
+  );
+  const activePaceSession =
+    activeSession && activeSession.mode === 'pace_control'
+      ? activeSession
+      : null;
+
+  const activeDrSession =
+    activeSession && activeSession.mode === 'distance_rounds'
+      ? activeSession
+      : null;
+  const activeLadderSession =
+    activeSession && activeSession.mode === 'putting_ladder'
+      ? activeSession
+      : null;
 
   return (
     <section
@@ -145,40 +131,120 @@ export function ChallengeCards({
               className="btn btn--primary btn--large-action"
               onClick={onOpenDistanceRounds}
             >
-              {activeSession
-                ? activeSession.status === 'completed'
+              {activeDrSession
+                ? activeDrSession.status === 'completed'
                   ? 'View Completed Session Summary'
-                  : `Resume Active Session (${activeSession.attempts.length} putts logged)`
+                  : `Resume Active Session (${activeDrSession.attempts.length} putts logged)`
                 : 'Configure & Start Distance Rounds'}
             </button>
           </div>
         </article>
 
-        {/* Putting Ladder & Pace Control (Not yet available in Milestone 2) */}
-        {UNAVAILABLE_CHALLENGES.map((challenge) => (
-          <article key={challenge.id} className="challenge-card">
-            <div className="challenge-card__header">
-              <h3 className="challenge-card__title">{challenge.title}</h3>
-              <span className="badge-unavailable" aria-label="Availability status">
-                <span aria-hidden="true">⏳</span>
-                {challenge.milestoneLabel}
-              </span>
-            </div>
+        {/* Putting Ladder (Available in Milestone 3) */}
+        <article className="challenge-card challenge-card--available">
+          <div className="challenge-card__header">
+            <h3 className="challenge-card__title">Putting Ladder</h3>
+            <span className="badge-available" aria-label="Availability status">
+              <span aria-hidden="true">●</span>
+              Available
+            </span>
+          </div>
 
-            <p className="challenge-card__description">{challenge.summary}</p>
+          <p className="challenge-card__description">
+            Climb from your shortest mark to your longest usable mat distance within a
+            fixed attempt budget (10, 15, 20, or 30 putts).
+          </p>
 
-            <ul className="challenge-card__rules">
-              {challenge.rules.map((rule) => (
-                <li key={rule}>{rule}</li>
-              ))}
-            </ul>
+          <ul className="challenge-card__rules">
+            <li>
+              Advance 1 distance rung after a Made putt; stay at your current distance rung
+              after a Missed putt.
+            </li>
+            <li>
+              Making a putt on the final configured distance immediately completes the
+              ladder as Cleared, ranked by cleared status, rungs completed, and efficiency.
+            </li>
+            <li>
+              Supports single-tap Made / Missed logging, optional miss tags, Undo (including
+              post-final-putt reopen), auto-resume, and comparable personal bests.
+            </li>
+          </ul>
 
-            <div className="challenge-card__footer">
-              <span>{challenge.inputFormat}</span>
-              <span>No sessions recorded yet</span>
-            </div>
-          </article>
-        ))}
+          <div className="challenge-card__footer">
+            <span>Primary input: Made / Missed</span>
+            <span>
+              {puttingLadderSessions.length === 0
+                ? 'No completed sessions yet'
+                : `${puttingLadderSessions.length} completed ${
+                    puttingLadderSessions.length === 1 ? 'session' : 'sessions'
+                  }`}
+            </span>
+          </div>
+
+          <div className="challenge-card__actions">
+            <button
+              type="button"
+              className="btn btn--primary btn--large-action"
+              onClick={onOpenPuttingLadder}
+            >
+              {activeLadderSession
+                ? activeLadderSession.status === 'completed'
+                  ? 'View Completed Ladder Summary'
+                  : `Resume Active Ladder (${activeLadderSession.attempts.length} putts logged)`
+                : 'Configure & Start Putting Ladder'}
+            </button>
+          </div>
+        </article>
+
+        {/* Pace Control (Available in Milestone 4) */}
+        <article className="challenge-card challenge-card--available">
+          <div className="challenge-card__header">
+            <h3 className="challenge-card__title">Pace Control</h3>
+            <span className="badge-available" aria-label="Availability status">
+              <span aria-hidden="true">●</span>
+              Available
+            </span>
+          </div>
+
+          <p className="challenge-card__description">
+            Mark a physical target zone (0.2m to 0.6m deep) on your 3.0m mat and practice
+            stopping the ball inside it from each target distance.
+          </p>
+
+          <ul className="challenge-card__rules">
+            <li>Record each putt as Short, In Zone, or Long with a single tap.</li>
+            <li>1 point for each ball finishing In Zone; Short and Long score 0.</li>
+            <li>
+              Reports % Short / % In Zone / % Long per target distance and overall, with
+              comparable personal bests.
+            </li>
+          </ul>
+
+          <div className="challenge-card__footer">
+            <span>Primary input: Short / In Zone / Long</span>
+            <span>
+              {paceControlSessions.length === 0
+                ? 'No completed sessions yet'
+                : `${paceControlSessions.length} completed ${
+                    paceControlSessions.length === 1 ? 'session' : 'sessions'
+                  }`}
+            </span>
+          </div>
+
+          <div className="challenge-card__actions">
+            <button
+              type="button"
+              className="btn btn--primary btn--large-action"
+              onClick={onOpenPaceControl}
+            >
+              {activePaceSession
+                ? activePaceSession.status === 'completed'
+                  ? 'View Completed Pace Control Summary'
+                  : `Resume Active Session (${activePaceSession.attempts.length} putts logged)`
+                : 'Configure & Start Pace Control'}
+            </button>
+          </div>
+        </article>
       </div>
     </section>
   );

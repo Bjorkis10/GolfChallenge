@@ -3,11 +3,13 @@
 > **Single Source of Truth:** This document tracks milestones, acceptance criteria, verification status, blockers, and session handoffs. Always read [GEMINI.md](./GEMINI.md) and this file at the start of every session.
 
 ## Project Status Overview
-- **Current Phase:** Milestone 2 Complete — Ready for **Milestone 3**
+- **Current Phase:** Milestone 4 Complete — Ready for **Milestone 5**
 - **Completed Milestones:**
   - Milestone 0 (Planning & Architecture Docs)
   - Milestone 1 (App Foundation, Mat Settings, Visual Direction & Responsive Shell)
   - Milestone 2 (Distance Rounds Game, Session Storage, ConfigKey & Personal Bests)
+  - Milestone 3 (Putting Ladder Game)
+  - Milestone 4 (Pace Control Game)
 - **Active Blockers:** None
 
 ---
@@ -75,7 +77,7 @@
 ---
 
 ### Milestone 3: Putting Ladder Game
-- **Status:** PENDING (Next)
+- **Status:** COMPLETED (2026-11-12)
 - **Scope:**
   - Implement `src/domain/puttingLadder.ts`:
     - Advance 1 distance rung on `Made`, stay at current distance rung on `Missed`.
@@ -87,11 +89,16 @@
 - **Acceptance Criteria:**
   - Vitest suite covers ladder advancement, staying on miss, clearing the final rung, budget exhaustion, post-final-putt undo reopening/updating history and PB without duplicates, and comparable PB ranking.
   - Browser verification of cleared and budget-exhausted runs on mobile and desktop layouts.
+- **Verification Record:**
+  - `npm run typecheck` — Passed with zero errors (`tsc --noEmit`).
+  - `npm test` — Passed (`4` test files, `25` tests covering `matSettings`, `distanceRounds`, `puttingLadder` progression, staying on miss, clearing the final rung, budget exhaustion, `configKey` equivalence, `personalBests` ranking, and post-final-putt Undo reopening/updating history and PB without duplicates).
+  - `npm run build` — Passed (`tsc -b && vite build`).
+  - Browser inspection on `http://localhost:5173/` across desktop (`1280x800`) and mobile (`390x844`) viewports verified the "Available" Distance Rounds & Putting Ladder badges alongside "Not yet available (Milestone 4)" Pace Control, usable mat distance (`2.6m`) validation rejecting `2.8m`, minimum 2-distance validation, staying on miss with optional `Left` + `Short` tagging, advancing on make, reload auto-resume, clearing the final rung (`Ladder Cleared!`), post-final-putt Undo on both cleared and budget-exhausted runs updating history/PB without duplicates, comparable PB improvement (`2/10` beating `4/10` attempts), and Abandon Session confirmation.
 
 ---
 
 ### Milestone 4: Pace Control Game
-- **Status:** PENDING
+- **Status:** COMPLETED (2026-11-12)
 - **Scope:**
   - Implement `src/domain/paceControl.ts`:
     - Configurable target distances (validated `<= maxUsableDistanceMetres <= 3.0m`), physical target zone depth (`0.2m` – `0.6m`), and putts per distance.
@@ -102,6 +109,12 @@
 - **Acceptance Criteria:**
   - Vitest suite covers pace control progression, dispersion tallies, post-final-putt undo reopening/updating history and PB, and comparable PB calculation.
   - Browser verification of full Pace Control flow on mobile and desktop layouts.
+- **Verification Record:**
+  - `npm run typecheck` — Passed with zero errors.
+  - `npm test` — Passed (`5` test files, `40` tests; new `paceControl.test.ts` has 13 tests covering setup validation, configKey equivalence, progression, dispersion tallies, PB ranking and post-final-putt Undo; `settingsStorage.test.ts` adds persistence/auto-resume/undo-without-duplicates and invalid-zone-depth backup tests).
+  - `npm run build` — Passed.
+  - Browser inspection on `http://localhost:5173/` (viewport was mobile-width only; desktop layout was **not** separately inspected): all three cards show "Available"; setup rejected `3.5m`; 5-distance / 3-putt / 0.4m setup started; Short / In Zone / Long logging; mid-session Undo; reload auto-resume at the saved putt; completing showed the summary with a first-benchmark PB callout; Undo Final Putt reopened the session and removed the history record (`1 → 0`); re-completing left exactly 1 history entry with the updated score (`6/15 → 5/15`); Abandon Session cleared the active session without touching history.
+- **Design notes:** The target zone is described as a zone of the chosen depth centred on each target distance (measured from the start line). Pace Control is ranked on In Zone points only. Putts run distance by distance in ascending order, single pass (no rounds).
 
 ---
 
@@ -167,3 +180,25 @@
   - Live browser checks on `http://localhost:5173/` across desktop (`1280x800`) and mobile (`390x844`) viewports: verified Distance Rounds setup validation against `2.6m` usable mat limit, active logging, optional non-blocking miss details (`Left` + `Short`), mid-session Undo, reload auto-resume, post-final-putt Undo reopening Putt 6 of 6 and updating the saved benchmark from `5/6` to `4/6` without duplicate history entries (`history.length === 1`), comparable Personal Best improvement (`+2 pts` on `6/6`), and Abandon Session flow.
 - **Known issues or blockers:** None.
 - **Next exact task:** Implement **Milestone 3** (Putting Ladder game engine, setup/active/summary views, post-final-putt Undo reopening/updating history and PB without duplicates, unit tests, and browser verification).
+
+### Session 4 (2026-11-12) — Milestone 3 Implementation
+- **What is finished:**
+  - Implemented `src/domain/puttingLadder.ts` and extended `src/domain/types.ts`, `src/domain/configKey.ts`, and `src/domain/personalBests.ts` with ladder distance validation (`>= 2` distances ordered shortest to longest within `0.5m <= d <= maxUsableDistanceMetres <= 3.0m`), fixed attempt budgets (`10 | 15 | 20 | 30`), 1-rung advancement on `Made`, staying on `Missed`, immediate ladder completion on making the final rung (`cleared: true`), comparable PB ranking (`cleared` > `rungsCompleted` > fewer `attemptsUsed` / more `attemptsRemaining`), optional miss tags, duplicate-submission protection, and post-final-putt Undo reopening/updating history and PB without duplicates.
+  - Extended `src/storage/settingsStorage.ts` to validate and persist Putting Ladder active sessions and completed history records alongside Distance Rounds.
+  - Built `src/components/PuttingLadderFlow.tsx` and updated `ChallengeCards.tsx`, `App.tsx`, and `components.css` (leaving Pace Control clearly marked as not yet available).
+  - Added unit tests in `src/domain/puttingLadder.test.ts` and `src/storage/settingsStorage.test.ts`.
+- **What was actually verified:**
+  - Automated CLI checks: `npm run typecheck`, `npm test` (4 test files, 25/25 tests passing), and `npm run build`.
+  - Live browser checks on `http://localhost:5173/` across desktop (`1280x800`) and mobile (`390x844`) viewports: verified Putting Ladder setup validation against `2.6m` usable mat limit and minimum 2-distance rule, staying on miss with `Left` + `Short` tags, advancing on make, reload auto-resume, clearing the final rung (`Ladder Cleared!`), post-final-putt Undo on both cleared and budget-exhausted runs without duplicate history entries, comparable PB improvement (`2/10` beating `4/10` attempts), and Abandon Session confirmation.
+- **Known issues or blockers:** None.
+- **Next exact task:** Implement **Milestone 4** (Pace Control game engine, physical target zone setup & 3-button Short / In Zone / Long logging view, dispersion breakdown, post-final-putt Undo reopening/updating history and PB without duplicates, unit tests, and browser verification).
+
+### Session 5 (2026-11-12) — Milestone 4 Implementation
+- **What is finished:**
+  - Added `src/domain/paceControl.ts`; extended `types.ts`, `configKey.ts` (`pace_control:v1:unit=m:d=...:zone=0.3:putts=5`) and `personalBests.ts` (points ranking and delta).
+  - Extended `settingsStorage.ts` to validate/persist Pace Control active sessions and history alongside the other modes.
+  - Built `PaceControlFlow.tsx`, wired it into `ChallengeCards.tsx` and `App.tsx` (Pace Control now Available), added Pace Control CSS.
+  - Added tests in `paceControl.test.ts` and `settingsStorage.test.ts`.
+- **What was actually verified:** typecheck, `npm test` (40/40) and `npm run build` pass; live browser flow as recorded under Milestone 4 (mobile-width viewport only).
+- **Known issues or blockers:** None. Nothing committed yet.
+- **Next exact task:** Implement **Milestone 5** (History & Data view, per-distance breakdown, PBs grouped by `configKey`, delete session with PB recalculation, JSON export and validated import with confirmation).

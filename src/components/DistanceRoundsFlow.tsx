@@ -93,9 +93,13 @@ export function DistanceRoundsFlow({
           })
         : null;
 
-    const existingPb = candidateConfigKey
+    const rawExistingPb = candidateConfigKey
       ? getPersonalBestForConfigKey(history, candidateConfigKey)
       : null;
+    const existingPb =
+      rawExistingPb && rawExistingPb.mode === 'distance_rounds'
+        ? rawExistingPb
+        : null;
 
     const totalPlannedPutts =
       validSetupDistances.length * puttsPerDistance * rounds;
@@ -430,6 +434,15 @@ export function DistanceRoundsFlow({
   if (activeSession.status === 'completed') {
     const completedRecord = buildCompletedDistanceRoundsRecord(activeSession);
     const pbEval = evaluatePersonalBestForSession(history, completedRecord);
+    const bestDrRecord =
+      pbEval.bestRecord.mode === 'distance_rounds'
+        ? pbEval.bestRecord
+        : completedRecord;
+    const previousBestDrRecord =
+      pbEval.previousBestRecord &&
+      pbEval.previousBestRecord.mode === 'distance_rounds'
+        ? pbEval.previousBestRecord
+        : null;
 
     return (
       <section aria-labelledby="dr-summary-title" className="settings-card">
@@ -473,7 +486,7 @@ export function DistanceRoundsFlow({
                 for this exact configuration.
               </p>
             )}
-            {pbEval.status === 'new_personal_best' && pbEval.previousBestRecord && (
+            {pbEval.status === 'new_personal_best' && previousBestDrRecord && (
               <p style={{ marginBottom: 0 }}>
                 New record of{' '}
                 <strong>
@@ -483,16 +496,16 @@ export function DistanceRoundsFlow({
                 </strong>{' '}
                 — improved by{' '}
                 <strong>+{pbEval.pointsDeltaFromPreviousBest} pts</strong> over your
-                previous best of {pbEval.previousBestRecord.summary.totalPoints} pts!
+                previous best of {previousBestDrRecord.summary.totalPoints} pts!
               </p>
             )}
             {pbEval.status === 'tied_personal_best' && (
               <p style={{ marginBottom: 0 }}>
                 You matched your personal best of{' '}
                 <strong>
-                  {pbEval.bestRecord.summary.totalPoints} /{' '}
-                  {pbEval.bestRecord.summary.maxPossiblePoints} pts (
-                  {pbEval.bestRecord.summary.overallMakePercentage.toFixed(1)}%)
+                  {bestDrRecord.summary.totalPoints} /{' '}
+                  {bestDrRecord.summary.maxPossiblePoints} pts (
+                  {bestDrRecord.summary.overallMakePercentage.toFixed(1)}%)
                 </strong>{' '}
                 for this exact configuration.
               </p>
@@ -501,9 +514,9 @@ export function DistanceRoundsFlow({
               <p style={{ marginBottom: 0 }}>
                 Comparable Personal Best for this exact setup:{' '}
                 <strong>
-                  {pbEval.bestRecord.summary.totalPoints} /{' '}
-                  {pbEval.bestRecord.summary.maxPossiblePoints} pts (
-                  {pbEval.bestRecord.summary.overallMakePercentage.toFixed(1)}%)
+                  {bestDrRecord.summary.totalPoints} /{' '}
+                  {bestDrRecord.summary.maxPossiblePoints} pts (
+                  {bestDrRecord.summary.overallMakePercentage.toFixed(1)}%)
                 </strong>
                 . ({pbEval.matchingSessionCount} completed sessions with this setup)
               </p>

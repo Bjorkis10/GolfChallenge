@@ -1,5 +1,5 @@
 import { roundToTenthMetre } from './matSettings';
-import { DistanceRoundsConfig } from './types';
+import { ChallengeConfig } from './types';
 
 export interface DistanceRoundsConfigKeyInput {
   readonly distancesMetres: readonly number[];
@@ -7,6 +7,19 @@ export interface DistanceRoundsConfigKeyInput {
   readonly rounds: number;
   readonly unit?: 'm';
   readonly pointsPerMake?: number;
+}
+
+export interface PuttingLadderConfigKeyInput {
+  readonly distancesMetres: readonly number[];
+  readonly attemptBudget: number;
+  readonly unit?: 'm';
+}
+
+export interface PaceControlConfigKeyInput {
+  readonly targetDistancesMetres: readonly number[];
+  readonly zoneDepthMetres: number;
+  readonly puttsPerDistance: number;
+  readonly unit?: 'm';
 }
 
 /**
@@ -32,12 +45,37 @@ export function getDistanceRoundsConfigKey(input: DistanceRoundsConfigKeyInput):
 }
 
 /**
+ * Produces the canonical fingerprint for a Putting Ladder configuration:
+ * `putting_ladder:v1:unit=m:d=1.0,1.5,2.0,2.5:budget=15:finish=complete`
+ */
+export function getPuttingLadderConfigKey(input: PuttingLadderConfigKeyInput): string {
+  const unit = input.unit ?? 'm';
+  const distancesSegment = normalizeDistancesForConfigKey(input.distancesMetres);
+  return `putting_ladder:v1:unit=${unit}:d=${distancesSegment}:budget=${input.attemptBudget}:finish=complete`;
+}
+
+/**
+ * Produces the canonical fingerprint for a Pace Control configuration:
+ * `pace_control:v1:unit=m:d=1.5,2.0,2.5:zone=0.3:putts=5`
+ */
+export function getPaceControlConfigKey(input: PaceControlConfigKeyInput): string {
+  const unit = input.unit ?? 'm';
+  const distancesSegment = normalizeDistancesForConfigKey(input.targetDistancesMetres);
+  const zone = roundToTenthMetre(input.zoneDepthMetres).toFixed(1);
+  return `pace_control:v1:unit=${unit}:d=${distancesSegment}:zone=${zone}:putts=${input.puttsPerDistance}`;
+}
+
+/**
  * Produces a deterministic configuration key for any supported challenge configuration.
  */
-export function getConfigKey(config: DistanceRoundsConfig): string {
+export function getConfigKey(config: ChallengeConfig): string {
   switch (config.mode) {
     case 'distance_rounds':
       return getDistanceRoundsConfigKey(config);
+    case 'putting_ladder':
+      return getPuttingLadderConfigKey(config);
+    case 'pace_control':
+      return getPaceControlConfigKey(config);
   }
 }
 
@@ -45,8 +83,8 @@ export function getConfigKey(config: DistanceRoundsConfig): string {
  * Returns true if and only if two configurations produce the exact same canonical configKey.
  */
 export function areConfigsComparable(
-  a: DistanceRoundsConfig,
-  b: DistanceRoundsConfig
+  a: ChallengeConfig,
+  b: ChallengeConfig
 ): boolean {
   return getConfigKey(a) === getConfigKey(b);
 }

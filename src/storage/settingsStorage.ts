@@ -15,9 +15,24 @@ import {
   upsertCompletedSession,
 } from '../domain/personalBests';
 import {
+  buildCompletedPaceControlRecord,
+  calculatePaceControlSummary,
+  getTotalPlannedPaceAttempts,
+  validatePaceControlSetup,
+} from '../domain/paceControl';
+import {
+  buildCompletedPuttingLadderRecord,
+  calculatePuttingLadderSummary,
+  validatePuttingLadderSetup,
+} from '../domain/puttingLadder';
+import {
   ActiveSessionState,
   CompletedSessionRecord,
   DistanceRoundsAttempt,
+  PaceControlAttempt,
+  PaceControlConfig,
+  PuttingLadderAttempt,
+  PuttingLadderConfig,
 } from '../domain/types';
 
 export const STORAGE_KEY_V1 = 'golf_challenge_app_v1';
@@ -115,6 +130,98 @@ function validateAttemptsArray(
   return validated;
 }
 
+function validateLadderAttemptsArray(
+  rawAttempts: unknown,
+  config: PuttingLadderConfig
+): PuttingLadderAttempt[] | null {
+  if (!Array.isArray(rawAttempts) || rawAttempts.length > config.attemptBudget) {
+    return null;
+  }
+
+  const totalRungs = config.distancesMetres.length;
+  const validated: PuttingLadderAttempt[] = [];
+  for (const item of rawAttempts) {
+    if (typeof item !== 'object' || item === null) {
+      return null;
+    }
+    const rec = item as Record<string, unknown>;
+    if (
+      typeof rec.attemptNumber !== 'number' ||
+      typeof rec.rungIndex !== 'number' ||
+      rec.rungIndex < 0 ||
+      rec.rungIndex >= totalRungs ||
+      typeof rec.distanceMetres !== 'number' ||
+      (rec.outcome !== 'made' && rec.outcome !== 'missed') ||
+      typeof rec.recordedAt !== 'string'
+    ) {
+      return null;
+    }
+    validated.push({
+      attemptNumber: rec.attemptNumber,
+      rungIndex: rec.rungIndex,
+      distanceMetres: rec.distanceMetres,
+      outcome: rec.outcome,
+      ...(typeof rec.missDetails === 'object' && rec.missDetails !== null
+        ? { missDetails: rec.missDetails as PuttingLadderAttempt['missDetails'] }
+        : {}),
+      recordedAt: rec.recordedAt,
+    });
+  }
+  return validated;
+}
+
+function validatePaceAttemptsArray(
+  rawAttempts: unknown,
+  config: PaceControlConfig
+): PaceControlAttempt[] | null {
+  const maxAttempts = getTotalPlannedPaceAttempts(config);
+  if (!Array.isArray(rawAttempts) || rawAttempts.length > maxAttempts) {
+    return null;
+  }
+
+  const validated: PaceControlAttempt[] = [];
+  for (const item of rawAttempts) {
+    if (typeof item !== 'object' || item === null) {
+      return null;
+    }
+    const rec = item as Record<string, unknown>;
+    if (
+      typeof rec.attemptNumber !== 'number' ||
+      typeof rec.distanceIndex !== 'number' ||
+      rec.distanceIndex < 0 ||
+      rec.distanceIndex >= config.targetDistancesMetres.length ||
+      typeof rec.puttInSetNumber !== 'number' ||
+      typeof rec.distanceMetres !== 'number' ||
+      (rec.outcome !== 'short' && rec.outcome !== 'in_zone' && rec.outcome !== 'long') ||
+      typeof rec.recordedAt !== 'string'
+    ) {
+      return null;
+    }
+    validated.push({
+      attemptNumber: rec.attemptNumber,
+      distanceIndex: rec.distanceIndex,
+      puttInSetNumber: rec.puttInSetNumber,
+      distanceMetres: rec.distanceMetres,
+      outcome: rec.outcome,
+      recordedAt: rec.recordedAt,
+    });
+  }
+  return validated;
+}
+
+function validatePaceConfig(rawConfig: Record<string, unknown>) {
+  return validatePaceControlSetup(
+    {
+      targetDistancesMetres: Array.isArray(rawConfig.targetDistancesMetres)
+        ? (rawConfig.targetDistancesMetres as number[])
+        : [],
+      zoneDepthMetres: Number(rawConfig.zoneDepthMetres),
+      puttsPerDistance: Number(rawConfig.puttsPerDistance),
+    },
+    PHYSICAL_MAT_LENGTH_METRES
+  );
+}
+
 function validateStoredActiveSession(
   rawSession: unknown
 ): { valid: boolean; session: ActiveSessionState | null; reason?: string } {
@@ -128,7 +235,9 @@ function validateStoredActiveSession(
   const rec = rawSession as Record<string, unknown>;
   if (
     typeof rec.sessionId !== 'string' ||
-    rec.mode !== 'distance_rounds' ||
+    (rec.mode !== 'distance_rounds' &&
+      rec.mode !== 'putting_ladder' &&
+      rec.mode !== 'pace_control') ||
     (rec.status !== 'in_progress' && rec.status !== 'completed') ||
     typeof rec.startedAt !== 'string' ||
     typeof rec.configKey !== 'string' ||
@@ -143,32 +252,115 @@ function validateStoredActiveSession(
   }
 
   const rawConfig = rec.config as Record<string, unknown>;
-  const configValidation = validateDistanceRoundsSetup(
+
+  if (rec.mode === 'distance_rounds') {
+    const configValidation = validateDistanceRoundsSetup(
+      {
+        distancesMetres: Array.isArray(rawConfig.distancesMetres)
+          ? (rawConfig.distancesMetres as number[])
+          : [],
+        puttsPerDistance: Number(rawConfig.puttsPerDistance),
+        rounds: Number(rawConfig.rounds),
+      },
+      PHYSICAL_MAT_LENGTH_METRES
+    );
+
+    if (!configValidation.valid || !configValidation.config) {
+      return {
+        valid: false,
+        session: null,
+        reason: `Saved active session config is invalid: ${configValidation.errors.join(' ')}`,
+      };
+    }
+
+    const maxAttempts = getTotalPlannedAttempts(configValidation.config);
+    const attempts = validateAttemptsArray(rec.attempts, maxAttempts);
+    if (!attempts) {
+      return {
+        valid: false,
+        session: null,
+        reason: 'Saved active session attempts are invalid.',
+      };
+    }
+
+    return {
+      valid: true,
+      session: {
+        sessionId: rec.sessionId,
+        mode: 'distance_rounds',
+        status: rec.status,
+        startedAt: rec.startedAt,
+        completedAt: typeof rec.completedAt === 'string' ? rec.completedAt : null,
+        config: configValidation.config,
+        configKey: rec.configKey,
+        attempts,
+      },
+    };
+  }
+
+  if (rec.mode === 'pace_control') {
+    const paceConfigValidation = validatePaceConfig(rawConfig);
+    if (!paceConfigValidation.valid || !paceConfigValidation.config) {
+      return {
+        valid: false,
+        session: null,
+        reason: `Saved active Pace Control session config is invalid: ${paceConfigValidation.errors.join(' ')}`,
+      };
+    }
+    const paceAttempts = validatePaceAttemptsArray(
+      rec.attempts,
+      paceConfigValidation.config
+    );
+    if (!paceAttempts) {
+      return {
+        valid: false,
+        session: null,
+        reason: 'Saved active Pace Control session attempts are invalid.',
+      };
+    }
+    return {
+      valid: true,
+      session: {
+        sessionId: rec.sessionId,
+        mode: 'pace_control',
+        status: rec.status,
+        startedAt: rec.startedAt,
+        completedAt: typeof rec.completedAt === 'string' ? rec.completedAt : null,
+        config: paceConfigValidation.config,
+        configKey: rec.configKey,
+        attempts: paceAttempts,
+      },
+    };
+  }
+
+  // mode === 'putting_ladder'
+  const ladderConfigValidation = validatePuttingLadderSetup(
     {
       distancesMetres: Array.isArray(rawConfig.distancesMetres)
         ? (rawConfig.distancesMetres as number[])
         : [],
-      puttsPerDistance: Number(rawConfig.puttsPerDistance),
-      rounds: Number(rawConfig.rounds),
+      attemptBudget: Number(rawConfig.attemptBudget),
     },
     PHYSICAL_MAT_LENGTH_METRES
   );
 
-  if (!configValidation.valid || !configValidation.config) {
+  if (!ladderConfigValidation.valid || !ladderConfigValidation.config) {
     return {
       valid: false,
       session: null,
-      reason: `Saved active session config is invalid: ${configValidation.errors.join(' ')}`,
+      reason: `Saved active ladder session config is invalid: ${ladderConfigValidation.errors.join(' ')}`,
     };
   }
 
-  const maxAttempts = getTotalPlannedAttempts(configValidation.config);
-  const attempts = validateAttemptsArray(rec.attempts, maxAttempts);
-  if (!attempts) {
+  const ladderAttempts = validateLadderAttemptsArray(
+    rec.attempts,
+    ladderConfigValidation.config
+  );
+  if (!ladderAttempts) {
     return {
       valid: false,
       session: null,
-      reason: 'Saved active session attempts are invalid.',
+      reason: 'Saved active ladder session attempts are invalid.',
     };
   }
 
@@ -176,13 +368,13 @@ function validateStoredActiveSession(
     valid: true,
     session: {
       sessionId: rec.sessionId,
-      mode: 'distance_rounds',
+      mode: 'putting_ladder',
       status: rec.status,
       startedAt: rec.startedAt,
       completedAt: typeof rec.completedAt === 'string' ? rec.completedAt : null,
-      config: configValidation.config,
+      config: ladderConfigValidation.config,
       configKey: rec.configKey,
-      attempts,
+      attempts: ladderAttempts,
     },
   };
 }
@@ -213,7 +405,9 @@ function validateStoredHistory(
     const rec = item as Record<string, unknown>;
     if (
       typeof rec.sessionId !== 'string' ||
-      rec.mode !== 'distance_rounds' ||
+      (rec.mode !== 'distance_rounds' &&
+        rec.mode !== 'putting_ladder' &&
+        rec.mode !== 'pace_control') ||
       typeof rec.configKey !== 'string' ||
       typeof rec.startedAt !== 'string' ||
       typeof rec.completedAt !== 'string' ||
@@ -228,50 +422,134 @@ function validateStoredHistory(
     }
 
     const rawConfig = rec.config as Record<string, unknown>;
-    const configValidation = validateDistanceRoundsSetup(
-      {
-        distancesMetres: Array.isArray(rawConfig.distancesMetres)
-          ? (rawConfig.distancesMetres as number[])
-          : [],
-        puttsPerDistance: Number(rawConfig.puttsPerDistance),
-        rounds: Number(rawConfig.rounds),
-      },
-      PHYSICAL_MAT_LENGTH_METRES
-    );
 
-    if (!configValidation.valid || !configValidation.config) {
-      return {
-        valid: false,
-        history: [],
-        reason: 'Saved session history contains an invalid challenge configuration.',
-      };
+    if (rec.mode === 'distance_rounds') {
+      const configValidation = validateDistanceRoundsSetup(
+        {
+          distancesMetres: Array.isArray(rawConfig.distancesMetres)
+            ? (rawConfig.distancesMetres as number[])
+            : [],
+          puttsPerDistance: Number(rawConfig.puttsPerDistance),
+          rounds: Number(rawConfig.rounds),
+        },
+        PHYSICAL_MAT_LENGTH_METRES
+      );
+
+      if (!configValidation.valid || !configValidation.config) {
+        return {
+          valid: false,
+          history: [],
+          reason: 'Saved session history contains an invalid challenge configuration.',
+        };
+      }
+
+      const maxAttempts = getTotalPlannedAttempts(configValidation.config);
+      const attempts = validateAttemptsArray(rec.attempts ?? [], maxAttempts);
+      if (!attempts) {
+        return {
+          valid: false,
+          history: [],
+          reason: 'Saved session history contains invalid attempt records.',
+        };
+      }
+
+      const summary = calculateDistanceRoundsSummary({
+        config: configValidation.config,
+        attempts,
+      });
+
+      validated.push({
+        sessionId: rec.sessionId,
+        mode: 'distance_rounds',
+        configKey: rec.configKey,
+        config: configValidation.config,
+        startedAt: rec.startedAt,
+        completedAt: rec.completedAt,
+        attempts,
+        summary,
+      });
+    } else if (rec.mode === 'pace_control') {
+      const paceConfigValidation = validatePaceConfig(rawConfig);
+      if (!paceConfigValidation.valid || !paceConfigValidation.config) {
+        return {
+          valid: false,
+          history: [],
+          reason: 'Saved session history contains an invalid Pace Control configuration.',
+        };
+      }
+
+      const paceAttempts = validatePaceAttemptsArray(
+        rec.attempts ?? [],
+        paceConfigValidation.config
+      );
+      if (!paceAttempts) {
+        return {
+          valid: false,
+          history: [],
+          reason: 'Saved session history contains invalid Pace Control attempt records.',
+        };
+      }
+
+      validated.push({
+        sessionId: rec.sessionId,
+        mode: 'pace_control',
+        configKey: rec.configKey,
+        config: paceConfigValidation.config,
+        startedAt: rec.startedAt,
+        completedAt: rec.completedAt,
+        attempts: paceAttempts,
+        summary: calculatePaceControlSummary({
+          config: paceConfigValidation.config,
+          attempts: paceAttempts,
+        }),
+      });
+    } else {
+      const ladderConfigValidation = validatePuttingLadderSetup(
+        {
+          distancesMetres: Array.isArray(rawConfig.distancesMetres)
+            ? (rawConfig.distancesMetres as number[])
+            : [],
+          attemptBudget: Number(rawConfig.attemptBudget),
+        },
+        PHYSICAL_MAT_LENGTH_METRES
+      );
+
+      if (!ladderConfigValidation.valid || !ladderConfigValidation.config) {
+        return {
+          valid: false,
+          history: [],
+          reason: 'Saved session history contains an invalid ladder configuration.',
+        };
+      }
+
+      const ladderAttempts = validateLadderAttemptsArray(
+        rec.attempts ?? [],
+        ladderConfigValidation.config
+      );
+      if (!ladderAttempts) {
+        return {
+          valid: false,
+          history: [],
+          reason: 'Saved session history contains invalid ladder attempt records.',
+        };
+      }
+
+      const summary = calculatePuttingLadderSummary({
+        config: ladderConfigValidation.config,
+        attempts: ladderAttempts,
+      });
+
+      validated.push({
+        sessionId: rec.sessionId,
+        mode: 'putting_ladder',
+        configKey: rec.configKey,
+        config: ladderConfigValidation.config,
+        startedAt: rec.startedAt,
+        completedAt: rec.completedAt,
+        attempts: ladderAttempts,
+        summary,
+      });
     }
-
-    const maxAttempts = getTotalPlannedAttempts(configValidation.config);
-    const attempts = validateAttemptsArray(rec.attempts ?? [], maxAttempts);
-    if (!attempts) {
-      return {
-        valid: false,
-        history: [],
-        reason: 'Saved session history contains invalid attempt records.',
-      };
-    }
-
-    const summary = calculateDistanceRoundsSummary({
-      config: configValidation.config,
-      attempts,
-    });
-
-    validated.push({
-      sessionId: rec.sessionId,
-      mode: 'distance_rounds',
-      configKey: rec.configKey,
-      config: configValidation.config,
-      startedAt: rec.startedAt,
-      completedAt: rec.completedAt,
-      attempts,
-      summary,
-    });
   }
 
   return { valid: true, history: validated };
@@ -567,7 +845,12 @@ export class SettingsStorageService {
 
     if (nextSession !== null) {
       if (nextSession.status === 'completed') {
-        const record = buildCompletedDistanceRoundsRecord(nextSession);
+        const record: CompletedSessionRecord =
+          nextSession.mode === 'distance_rounds'
+            ? buildCompletedDistanceRoundsRecord(nextSession)
+            : nextSession.mode === 'putting_ladder'
+              ? buildCompletedPuttingLadderRecord(nextSession)
+              : buildCompletedPaceControlRecord(nextSession);
         this.inMemoryHistory = upsertCompletedSession(this.inMemoryHistory, record);
       } else {
         this.inMemoryHistory = removeCompletedSessionById(

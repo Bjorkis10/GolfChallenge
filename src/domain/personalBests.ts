@@ -1,4 +1,9 @@
-import { CompletedSessionRecord } from './types';
+import {
+  CompletedDistanceRoundsRecord,
+  CompletedPaceControlRecord,
+  CompletedPuttingLadderRecord,
+  CompletedSessionRecord,
+} from './types';
 
 export type PersonalBestStatus =
   | 'first_for_config'
@@ -21,13 +26,68 @@ export interface PersonalBestEvaluation {
  * Returns > 0 if `a` scored higher than `b`, < 0 if lower, 0 if tied.
  */
 export function compareDistanceRoundsScores(
-  a: CompletedSessionRecord,
-  b: CompletedSessionRecord
+  a: CompletedDistanceRoundsRecord,
+  b: CompletedDistanceRoundsRecord
 ): number {
   if (a.summary.totalPoints !== b.summary.totalPoints) {
     return a.summary.totalPoints - b.summary.totalPoints;
   }
-  return a.summary. totalMakes - b.summary.totalMakes;
+  return a.summary.totalMakes - b.summary.totalMakes;
+}
+
+/**
+ * Compares two completed Putting Ladder records with the same configKey.
+ * Ranked by:
+ * 1) `cleared` status (`true` > `false`)
+ * 2) `rungsCompleted` (higher > lower)
+ * 3) Efficiency: fewer `attemptsUsed` / more `attemptsRemaining`
+ */
+export function comparePuttingLadderScores(
+  a: CompletedPuttingLadderRecord,
+  b: CompletedPuttingLadderRecord
+): number {
+  if (a.summary.cleared !== b.summary.cleared) {
+    return a.summary.cleared ? 1 : -1;
+  }
+  if (a.summary.rungsCompleted !== b.summary.rungsCompleted) {
+    return a.summary.rungsCompleted - b.summary.rungsCompleted;
+  }
+  if (a.summary.attemptsRemaining !== b.summary.attemptsRemaining) {
+    return a.summary.attemptsRemaining - b.summary.attemptsRemaining;
+  }
+  return b.summary.attemptsUsed - a.summary.attemptsUsed;
+}
+
+/**
+ * Compares two completed Pace Control records with the same configKey.
+ * Ranked by total In Zone points (higher is better). Equal points imply equal
+ * Short + Long totals, so ties are genuine ties.
+ */
+export function comparePaceControlScores(
+  a: CompletedPaceControlRecord,
+  b: CompletedPaceControlRecord
+): number {
+  return a.summary.totalPoints - b.summary.totalPoints;
+}
+
+/**
+ * Compares two completed session records of the same mode and configKey.
+ * Returns > 0 if `a` is better than `b`, < 0 if worse, 0 if tied.
+ */
+export function compareComparableSessionScores(
+  a: CompletedSessionRecord,
+  b: CompletedSessionRecord
+): number {
+  if (a.mode === 'distance_rounds' && b.mode === 'distance_rounds') {
+    return compareDistanceRoundsScores(a, b);
+  }
+  if (a.mode === 'putting_ladder' && b.mode === 'putting_ladder') {
+    return comparePuttingLadderScores(a, b);
+  }
+  if (a.mode === 'pace_control' && b.mode === 'pace_control') {
+    return comparePaceControlScores(a, b);
+  }
+  return 0;
 }
 
 /**
@@ -46,7 +106,7 @@ export function getPersonalBestForConfigKey(
   let best = matching[0];
   for (let i = 1; i < matching.length; i += 1) {
     const candidate = matching[i];
-    const diff = compareDistanceRoundsScores(candidate, best);
+    const diff = compareComparableSessionScores(candidate, best);
     if (diff > 0) {
       best = candidate;
     } else if (diff === 0 && candidate.completedAt < best.completedAt) {
@@ -107,8 +167,14 @@ export function evaluatePersonalBestForSession(
     };
   }
 
-  const diff = compareDistanceRoundsScores(currentRecord, previousBestRecord);
-  const delta = currentRecord.summary.totalPoints - previousBestRecord.summary.totalPoints;
+  const diff = compareComparableSessionScores(currentRecord, previousBestRecord);
+  const delta =
+    (currentRecord.mode === 'distance_rounds' &&
+      previousBestRecord.mode === 'distance_rounds') ||
+    (currentRecord.mode === 'pace_control' &&
+      previousBestRecord.mode === 'pace_control')
+      ? currentRecord.summary.totalPoints - previousBestRecord.summary.totalPoints
+      : null;
 
   if (diff > 0) {
     return {
@@ -129,7 +195,7 @@ export function evaluatePersonalBestForSession(
       isPersonalBest: true,
       bestRecord,
       previousBestRecord,
-      pointsDeltaFromPreviousBest: 0,
+      pointsDeltaFromPreviousBest: delta !== null ? 0 : null,
       matchingSessionCount: combinedMatching.length,
     };
   }

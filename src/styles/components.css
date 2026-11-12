@@ -552,6 +552,22 @@
   gap: var(--space-2);
 }
 
+.option-pill-group--4 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (min-width: 520px) {
+  .option-pill-group--4 {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.distance-chip__rung-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--color-accent-secondary);
+}
+
 .option-pill {
   min-height: var(--touch-target-min);
   padding: 0 var(--space-3);
@@ -786,6 +802,18 @@
   border: 2px solid var(--color-accent-primary);
 }
 
+.live-distance-pill--cleared {
+  background-color: var(--color-success-bg);
+  border-color: var(--color-success-border);
+  color: var(--color-success-text);
+}
+
+.rung-status-cleared {
+  display: inline-block;
+  font-weight: 700;
+  color: var(--color-success-text);
+}
+
 .live-distance-pill__dist {
   font-family: var(--font-mono);
   font-weight: 700;
@@ -955,4 +983,84 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
+}
+
+/* ---------- Pace Control (Milestone 4) ---------- */
+.option-pill-group--5 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+@media (min-width: 520px) {
+  .option-pill-group--5 {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+.logging-pace-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+}
+
+@media (min-width: 640px) {
+  .logging-pace-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.btn--log-pace {
+  min-height: 76px;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  text-align: left;
+  background-color: var(--color-bg-elevated);
+  border: 2px solid var(--color-border-strong);
+  color: var(--color-text-primary);
+}
+
+.btn--log-pace:hover {
+  background-color: var(--color-bg-subtle, #f1eee4);
+}
+
+.btn--log-pace-zone {
+  background-color: var(--color-accent-primary);
+  border-color: var(--color-accent-primary);
+  color: var(--color-text-on-accent);
+}
+
+.btn--log-pace-zone:hover {
+  background-color: var(--color-accent-primary-hover);
+}
+
+.btn--log-pace .btn__log-icon {
+  background-color: rgba(0, 0, 0, 0.07);
+}
+
+.btn--log-pace-zone .btn__log-icon {
+  background-color: rgba(255, 255, 255, 0.16);
+}
+
+.dispersion-bar {
+  display: flex;
+  height: 14px;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-bg-elevated);
+}
+
+.dispersion-bar__seg--short {
+  background: repeating-linear-gradient(45deg, #bfc7c1, #bfc7c1 4px, #dfe4e0 4px, #dfe4e0 8px);
+}
+
+.dispersion-bar__seg--zone {
+  background: var(--color-accent-primary);
+}
+
+.dispersion-bar__seg--long {
+  background: repeating-linear-gradient(-45deg, #8a948e, #8a948e 4px, #b4bcb6 4px, #b4bcb6 8px);
 }
