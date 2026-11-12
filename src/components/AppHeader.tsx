@@ -1,6 +1,6 @@
 import { formatMetres, MatSettings } from '../domain/matSettings';
 
-export type ShellTab = 'challenges' | 'settings';
+export type ShellTab = 'challenges' | 'history' | 'settings';
 
 interface AppHeaderProps {
   readonly activeTab: ShellTab;
@@ -40,6 +40,17 @@ export function AppHeader({ activeTab, onSelectTab, settings }: AppHeaderProps) 
           onClick={() => onSelectTab('challenges')}
         >
           Practice Challenges
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id="tab-history"
+          aria-controls="panel-history"
+          aria-selected={activeTab === 'history'}
+          className="app-nav__tab"
+          onClick={() => onSelectTab('history')}
+        >
+          History &amp; Data
         </button>
         <button
           type="button"

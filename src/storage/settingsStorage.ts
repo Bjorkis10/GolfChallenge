@@ -7,6 +7,7 @@ import {
 import {
   DEFAULT_MAT_SETTINGS,
   MatSettings,
+  MIN_PUTTING_DISTANCE_METRES,
   PHYSICAL_MAT_LENGTH_METRES,
   validateMatSettings,
 } from '../domain/matSettings';
@@ -89,6 +90,15 @@ function getDefaultBrowserStorage(): KeyValueStorageLike | null {
   }
 }
 
+function isValidAttemptDistance(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    value >= MIN_PUTTING_DISTANCE_METRES &&
+    value <= PHYSICAL_MAT_LENGTH_METRES
+  );
+}
+
 function validateAttemptsArray(
   rawAttempts: unknown,
   maxTotalAttempts: number
@@ -108,7 +118,7 @@ function validateAttemptsArray(
       typeof rec.roundNumber !== 'number' ||
       typeof rec.distanceIndex !== 'number' ||
       typeof rec.puttInSetNumber !== 'number' ||
-      typeof rec.distanceMetres !== 'number' ||
+      !isValidAttemptDistance(rec.distanceMetres) ||
       (rec.outcome !== 'made' && rec.outcome !== 'missed') ||
       typeof rec.recordedAt !== 'string'
     ) {
@@ -150,7 +160,7 @@ function validateLadderAttemptsArray(
       typeof rec.rungIndex !== 'number' ||
       rec.rungIndex < 0 ||
       rec.rungIndex >= totalRungs ||
-      typeof rec.distanceMetres !== 'number' ||
+      !isValidAttemptDistance(rec.distanceMetres) ||
       (rec.outcome !== 'made' && rec.outcome !== 'missed') ||
       typeof rec.recordedAt !== 'string'
     ) {
@@ -191,7 +201,7 @@ function validatePaceAttemptsArray(
       rec.distanceIndex < 0 ||
       rec.distanceIndex >= config.targetDistancesMetres.length ||
       typeof rec.puttInSetNumber !== 'number' ||
-      typeof rec.distanceMetres !== 'number' ||
+      !isValidAttemptDistance(rec.distanceMetres) ||
       (rec.outcome !== 'short' && rec.outcome !== 'in_zone' && rec.outcome !== 'long') ||
       typeof rec.recordedAt !== 'string'
     ) {
@@ -394,6 +404,7 @@ function validateStoredHistory(
   }
 
   const validated: CompletedSessionRecord[] = [];
+  const seenSessionIds = new Set<string>();
   for (const item of rawHistory) {
     if (typeof item !== 'object' || item === null) {
       return {
@@ -403,6 +414,16 @@ function validateStoredHistory(
       };
     }
     const rec = item as Record<string, unknown>;
+    if (typeof rec.sessionId === 'string') {
+      if (seenSessionIds.has(rec.sessionId)) {
+        return {
+          valid: false,
+          history: [],
+          reason: `Saved session history contains a duplicate session id (${rec.sessionId}).`,
+        };
+      }
+      seenSessionIds.add(rec.sessionId);
+    }
     if (
       typeof rec.sessionId !== 'string' ||
       (rec.mode !== 'distance_rounds' &&
@@ -555,7 +576,7 @@ function validateStoredHistory(
   return { valid: true, history: validated };
 }
 
-function parseAndValidateEnvelope(raw: string): {
+export function parseAndValidateEnvelope(raw: string): {
   valid: boolean;
   envelope?: StorageEnvelopeV1;
   reason?: string;
@@ -589,7 +610,7 @@ function parseAndValidateEnvelope(raw: string): {
   if (!settingsValidation.valid || !settingsValidation.settings) {
     return {
       valid: false,
-      reason: `Saved mat settings are invalid: ${settingsValidation.errors.join(' ')}`,
+      reason: `Saved mat settings are invalid: ${Array.from(new Set(settingsValidation.errors)).join(' ')}`,
     };
   }
 
@@ -861,6 +882,75 @@ export class SettingsStorageService {
     }
 
     return this.persistCurrentMemoryEnvelope(now);
+  }
+
+  /**
+   * Deletes one completed session from history. The active session is never touched, and a
+   * session that is still the active (summary) session cannot be deleted from history.
+   */
+  public deleteCompletedSession(
+    sessionId: string,
+    now: () => Date = () => new Date()
+  ): StorageSaveResult & { readonly deleted: boolean } {
+    const exists = this.inMemoryHistory.some((item) => item.sessionId === sessionId);
+    const isActive = this.inMemoryActiveSession?.sessionId === sessionId;
+    if (!exists || isActive) {
+      return {
+        deleted: false,
+        savedToStorage: false,
+        health: this.health,
+        message: isActive
+          ? 'This session is still open on the challenge summary. Close it there first.'
+          : 'Session not found in history.',
+        activeSession: this.inMemoryActiveSession,
+        history: this.inMemoryHistory,
+      };
+    }
+    const previousHistory = this.inMemoryHistory;
+    this.inMemoryHistory = removeCompletedSessionById(previousHistory, sessionId);
+    const result = this.persistCurrentMemoryEnvelope(now);
+    return { ...result, deleted: true };
+  }
+
+  /**
+   * Replaces saved settings and history with already-validated imported data. The active
+   * session is left untouched. Refuses while unreadable data is being preserved, and rolls
+   * back the in-memory state if a real storage write fails, so nothing is half-replaced.
+   */
+  public replaceWithImportedData(
+    settings: MatSettings,
+    history: readonly CompletedSessionRecord[],
+    now: () => Date = () => new Date()
+  ): StorageSaveResult & { readonly replaced: boolean } {
+    if (this.health === 'corrupted_preserved_locked') {
+      return {
+        replaced: false,
+        savedToStorage: false,
+        health: this.health,
+        message:
+          'Import blocked: unreadable saved data is being preserved. Reset corrupted storage first if you want to replace it.',
+        activeSession: this.inMemoryActiveSession,
+        history: this.inMemoryHistory,
+      };
+    }
+    const previousSettings = this.inMemorySettings;
+    const previousHistory = this.inMemoryHistory;
+    this.inMemorySettings = settings;
+    this.inMemoryHistory = history;
+    const result = this.persistCurrentMemoryEnvelope(now);
+    if (!result.savedToStorage && this.storage) {
+      this.inMemorySettings = previousSettings;
+      this.inMemoryHistory = previousHistory;
+      return {
+        replaced: false,
+        savedToStorage: false,
+        health: result.health,
+        message: `Import failed: ${result.message ?? 'could not write to browser storage.'} Your existing data was not changed.`,
+        activeSession: this.inMemoryActiveSession,
+        history: this.inMemoryHistory,
+      };
+    }
+    return { ...result, replaced: true };
   }
 
   /**

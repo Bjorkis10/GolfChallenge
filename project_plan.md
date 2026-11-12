@@ -3,13 +3,14 @@
 > **Single Source of Truth:** This document tracks milestones, acceptance criteria, verification status, blockers, and session handoffs. Always read [GEMINI.md](./GEMINI.md) and this file at the start of every session.
 
 ## Project Status Overview
-- **Current Phase:** Milestone 4 Complete — Ready for **Milestone 5**
+- **Current Phase:** Milestone 5 Complete — Ready for **Milestone 6**
 - **Completed Milestones:**
   - Milestone 0 (Planning & Architecture Docs)
   - Milestone 1 (App Foundation, Mat Settings, Visual Direction & Responsive Shell)
   - Milestone 2 (Distance Rounds Game, Session Storage, ConfigKey & Personal Bests)
   - Milestone 3 (Putting Ladder Game)
   - Milestone 4 (Pace Control Game)
+  - Milestone 5 (Session History, Comparable Personal Bests & Data Export/Import)
 - **Active Blockers:** None
 
 ---
@@ -119,7 +120,7 @@
 ---
 
 ### Milestone 5: Session History, Comparable Personal Bests & Data Export/Import
-- **Status:** PENDING
+- **Status:** COMPLETED (2026-11-12)
 - **Scope:**
   - Build the `History & Data` view:
     - Session history list filterable by game mode, with expandable per-distance breakdowns and PB indicators.
@@ -132,6 +133,14 @@
 - **Acceptance Criteria:**
   - Vitest tests for export/import validation, rejecting malformed or out-of-bounds payloads without modifying existing data.
   - Browser verification of history filtering, PB grouping, export, invalid import rejection, and confirmed replacement.
+- **Verification Record:**
+  - `npm run typecheck` — Passed. `npm test` — Passed (`6` test files, `58` tests; new `src/storage/dataTransfer.test.ts` has 18 tests: valid round trip of all three modes, malformed JSON, wrong `schemaVersion`, settings/default distances > 3.0m, session-config and attempt distances out of bounds, invalid zone depth, invalid/over-long attempts, duplicate session ids, storage byte-identical after rejection, confirmed replacement + reload, rollback on write failure, import blocked while unreadable data is preserved, deletion with PB promotion/removal, active session untouched, open-summary session not deletable, mode filter). `npm run build` — Passed.
+  - Browser (`http://localhost:5173/`, seeded with clearly test-only data via localStorage, cleared afterwards) at `390x844` and `1280x800`: History & Data tab; filtering by mode (1 ladder / 2 distance rounds); expandable breakdown tables; PBs grouped by `configKey` with "★ Personal best" text badges; deleting the PB session after confirmation promoted the next-best and persisted (`4 → 3` records); export triggered a `golf-challenge-backup-<date>.json` download (settings + history); an out-of-bounds (`3.5m`) import and malformed JSON were rejected with storage unchanged; a valid import showed a preview, did nothing until confirmed, then replaced history and settings (usable `2.6m` shown in the header). No horizontal page overflow on mobile (Pace Control breakdown table scrolls inside its own wrapper). Not browser-tested: delete-while-active-summary (covered by unit test only), real OS file-picker dialog (file chosen programmatically).
+- **Design notes:**
+  - Exports are a valid `StorageEnvelopeV1` (`schemaVersion`, `settings`, `history`, plus `app`/`exportedAt`); the active session is deliberately **not** exported or replaced by import. Import requires both `settings` and a `history` array.
+  - Import and load share `parseAndValidateEnvelope` (now exported from `settingsStorage.ts`); attempt distances are now bounded to `0.5m–3.0m` and duplicate `sessionId`s are rejected for load as well as import.
+  - Import is refused while unreadable data is being preserved (reset first), and is rolled back if the storage write fails. A session still shown on its challenge summary cannot be deleted from history until closed.
+  - Personal bests are derived on demand, so deletion recalculates them automatically.
 
 ---
 
@@ -202,3 +211,17 @@
 - **What was actually verified:** typecheck, `npm test` (40/40) and `npm run build` pass; live browser flow as recorded under Milestone 4 (mobile-width viewport only).
 - **Known issues or blockers:** None. Nothing committed yet.
 - **Next exact task:** Implement **Milestone 5** (History & Data view, per-distance breakdown, PBs grouped by `configKey`, delete session with PB recalculation, JSON export and validated import with confirmation).
+
+### Session 6 (2026-11-12) — Milestone 5 Implementation
+- **What is finished:** `historyView.ts` (filter/sort/PB grouping), `dataTransfer.ts` (export payload, in-memory import validation + preview), `SettingsStorageService.deleteCompletedSession` / `replaceWithImportedData`, `HistoryDataPanel.tsx`, third header tab "History & Data", updated footer backup text, CSS, tests.
+- **What was actually verified:** typecheck, 58/58 tests, build; browser flow as recorded under Milestone 5.
+- **Known issues or blockers:** None.
+- **Next exact prompt (Milestone 6):**
+
+> First read GEMINI.md, project_plan.md, and architecture.md in full and follow all conventions in GEMINI.md. Inspect the existing code in src/ to match patterns from Milestones 1–5.
+>
+> Implement Milestone 6 (Accessibility Audit, Polish & Deployment Preparation) only:
+> 1. Audit and fix keyboard navigation (tablist arrow-key support and `aria-controls` targets that exist), focus management (move focus sensibly after view changes, delete confirm, import preview/error), ARIA live announcements for logging/undo/completion, colour contrast, and `prefers-reduced-motion`.
+> 2. Add an optional, clearly labelled Demo Data preview mode strictly isolated from real saved history (never written to the real storage key and never included in export).
+> 3. Add a concise README.md and static-hosting configuration (relative base path, build/preview instructions).
+> 4. Run npm run typecheck, npm test, npm run build with zero warnings, and verify in the browser on mobile and desktop viewports plus `vite preview`. Update project_plan.md and report any remaining known issues.

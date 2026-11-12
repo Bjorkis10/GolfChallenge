@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { AppHeader, ShellTab } from './components/AppHeader';
 import { ChallengeCards } from './components/ChallengeCards';
+import { HistoryDataPanel } from './components/HistoryDataPanel';
 import { DistanceRoundsFlow } from './components/DistanceRoundsFlow';
 import { MatSettingsPanel } from './components/MatSettingsPanel';
 import { PaceControlFlow } from './components/PaceControlFlow';
@@ -67,6 +68,41 @@ export function App() {
     setStorageHealth(result.health);
     setStorageMessage(result.message);
     setChallengesView('overview');
+  };
+
+  const handleDeleteHistorySession = (sessionId: string) => {
+    const result = storageService.deleteCompletedSession(sessionId);
+    setHistory(result.history);
+    setStorageHealth(result.health);
+    setStorageMessage(result.message);
+    return {
+      ok: result.deleted,
+      message: result.deleted
+        ? result.savedToStorage
+          ? 'Session deleted. Personal bests were recalculated.'
+          : 'Session deleted in memory only — it could not be saved to browser storage.'
+        : result.message,
+    };
+  };
+
+  const handleImportData = (
+    nextSettings: MatSettings,
+    nextHistory: readonly CompletedSessionRecord[]
+  ) => {
+    const result = storageService.replaceWithImportedData(nextSettings, nextHistory);
+    if (!result.replaced) {
+      return { ok: false, message: result.message };
+    }
+    setSettings(nextSettings);
+    setHistory(result.history);
+    setStorageHealth(result.health);
+    setStorageMessage(result.message);
+    return {
+      ok: true,
+      message: result.savedToStorage
+        ? `Import complete: ${nextHistory.length} session${nextHistory.length === 1 ? '' : 's'} and mat settings replaced.`
+        : 'Import applied in memory only — browser storage is unavailable, so export again to keep it.',
+    };
   };
 
   const handleResetCorruptedStorage = () => {
@@ -150,6 +186,14 @@ export function App() {
               onOpenPaceControl={() => setChallengesView('pace_control')}
             />
           )
+        ) : activeTab === 'history' ? (
+          <HistoryDataPanel
+            settings={settings}
+            history={history}
+            activeSession={activeSession}
+            onDeleteSession={handleDeleteHistorySession}
+            onImportData={handleImportData}
+          />
         ) : (
           <MatSettingsPanel
             key={`${settings.maxUsableDistanceMetres}-${settings.defaultDistancesMetres.join(',')}`}
@@ -162,8 +206,9 @@ export function App() {
       <footer className="app-footer">
         <p style={{ marginBottom: 0 }}>
           <strong>Local Practice Storage:</strong> Settings, active sessions, and completed
-          session history are stored locally in this browser. Clearing site data removes
-          local data—JSON export backup will be added in Milestone 5.
+          session history are stored locally in this browser, and the browser can clear them
+          (for example when site data is cleared). Use Export JSON backup in History &amp; Data
+          to keep a copy.
         </p>
         <p style={{ marginBottom: 0 }}>
           Practice scores track personal consistency on your home mat and are not validated
