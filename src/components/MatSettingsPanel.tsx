@@ -159,13 +159,11 @@ export function MatSettingsPanel({
   };
 
   return (
-    <section
-      id="panel-settings"
-      role="tabpanel"
-      aria-labelledby="tab-settings"
-    >
+    <section aria-labelledby="settings-heading">
       <div className="section-header">
-        <h2 className="section-header__title">3.0m Mat Settings</h2>
+        <h2 className="section-header__title" id="settings-heading">
+          3.0m Mat Settings
+        </h2>
         <p className="section-header__lead">
           Your physical putting mat is fixed at <strong>3.0m</strong>. Set your
           maximum usable putting distance based on where your cup sits, and

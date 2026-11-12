@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppHeader, ShellTab } from './components/AppHeader';
 import { ChallengeCards } from './components/ChallengeCards';
 import { HistoryDataPanel } from './components/HistoryDataPanel';
@@ -7,6 +7,8 @@ import { MatSettingsPanel } from './components/MatSettingsPanel';
 import { PaceControlFlow } from './components/PaceControlFlow';
 import { PuttingLadderFlow } from './components/PuttingLadderFlow';
 import { StorageBanner } from './components/StorageBanner';
+import { describeSessionChange } from './domain/announcements';
+import { buildDemoHistory } from './domain/demoData';
 import { MatSettings } from './domain/matSettings';
 import {
   ActiveSessionState,
@@ -41,6 +43,48 @@ export function App() {
   const [storageMessage, setStorageMessage] = useState<string | null>(
     initialLoad.message
   );
+
+  // Demo preview: in-memory only, never saved, never exported (see HistoryDataPanel).
+  const [demoMode, setDemoMode] = useState(false);
+  const demoHistory = useMemo(() => buildDemoHistory(), []);
+  useEffect(() => {
+    if (activeTab !== 'history') setDemoMode(false);
+  }, [activeTab]);
+
+  // Screen-reader announcements for logging / undo / completion, derived from session changes.
+  const [announcement, setAnnouncement] = useState('');
+  const prevSessionRef = useRef<ActiveSessionState | null>(activeSession);
+  useEffect(() => {
+    const message = describeSessionChange(prevSessionRef.current, activeSession);
+    prevSessionRef.current = activeSession;
+    if (message) setAnnouncement(message);
+  }, [activeSession]);
+
+  // Focus management: after a view change (not a tab-key press), move focus to the new heading.
+  const tabNavRef = useRef(false);
+  const mainRef = useRef<HTMLElement>(null);
+  const firstViewRender = useRef(true);
+  const sessionPhase = activeSession ? activeSession.status : 'none';
+  useEffect(() => {
+    if (firstViewRender.current) {
+      firstViewRender.current = false;
+      return;
+    }
+    if (tabNavRef.current) {
+      tabNavRef.current = false;
+      return;
+    }
+    const heading = mainRef.current?.querySelector<HTMLElement>('h2');
+    if (heading) {
+      heading.tabIndex = -1;
+      heading.focus();
+    }
+  }, [activeTab, challengesView, sessionPhase]);
+
+  const handleSelectTab = (tab: ShellTab) => {
+    if (tab !== activeTab) tabNavRef.current = true;
+    setActiveTab(tab);
+  };
 
   const handleSaveSettings = (nextSettings: MatSettings) => {
     const result = storageService.saveSettings(nextSettings);
@@ -133,7 +177,7 @@ export function App() {
     <div className="app-shell">
       <AppHeader
         activeTab={activeTab}
-        onSelectTab={setActiveTab}
+        onSelectTab={handleSelectTab}
         settings={settings}
       />
 
@@ -143,7 +187,16 @@ export function App() {
         onResetCorruptedStorage={handleResetCorruptedStorage}
       />
 
-      <main>
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {announcement}
+      </div>
+
+      <main ref={mainRef}>
+        <div
+          id="main-tabpanel"
+          role="tabpanel"
+          aria-labelledby={`tab-${activeTab}`}
+        >
         {activeTab === 'challenges' ? (
           challengesView === 'distance_rounds' ? (
             <DistanceRoundsFlow
@@ -189,8 +242,10 @@ export function App() {
         ) : activeTab === 'history' ? (
           <HistoryDataPanel
             settings={settings}
-            history={history}
-            activeSession={activeSession}
+            history={demoMode ? demoHistory : history}
+            activeSession={demoMode ? null : activeSession}
+            demoMode={demoMode}
+            onToggleDemoMode={setDemoMode}
             onDeleteSession={handleDeleteHistorySession}
             onImportData={handleImportData}
           />
@@ -201,6 +256,7 @@ export function App() {
             onSaveSettings={handleSaveSettings}
           />
         )}
+        </div>
       </main>
 
       <footer className="app-footer">

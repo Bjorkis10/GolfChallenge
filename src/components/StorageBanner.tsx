@@ -28,7 +28,7 @@ export function StorageBanner({
   };
 
   return (
-    <section className={bannerClass} role="alert" aria-live="polite">
+    <section className={bannerClass} role="alert">
       <div>
         <h2 className="status-banner__title">{titleByHealth[health]}</h2>
         <p className="status-banner__body">{message}</p>

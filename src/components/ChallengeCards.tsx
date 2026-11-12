@@ -52,13 +52,11 @@ export function ChallengeCards({
       : null;
 
   return (
-    <section
-      id="panel-challenges"
-      role="tabpanel"
-      aria-labelledby="tab-challenges"
-    >
+    <section aria-labelledby="challenges-heading">
       <div className="section-header">
-        <h2 className="section-header__title">Practice Challenges</h2>
+        <h2 className="section-header__title" id="challenges-heading">
+          Practice Challenges
+        </h2>
         <p className="section-header__lead">
           Select an available putting challenge below, or adjust your 3.0m mat’s usable
           putting distance and default marks.

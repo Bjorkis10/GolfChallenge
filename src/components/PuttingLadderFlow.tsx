@@ -735,7 +735,7 @@ export function PuttingLadderFlow({
       </div>
 
       {/* Prominent Target Distance Callout */}
-      <div className="active-target-banner" aria-live="polite">
+      <div className="active-target-banner">
         <div className="active-target-banner__distance-block">
           <span className="active-target-banner__eyebrow">
             Current Ladder Rung ({step.currentRungNumber} of {step.totalRungs})
@@ -911,6 +911,7 @@ export function PuttingLadderFlow({
           <button
             type="button"
             className="btn btn--danger"
+            id="abandon-trigger"
             onClick={() => setConfirmingAbandon(true)}
           >
             Abandon Session
@@ -937,7 +938,11 @@ export function PuttingLadderFlow({
             <button
               type="button"
               className="btn btn--secondary"
-              onClick={() => setConfirmingAbandon(false)}
+              autoFocus
+              onClick={() => {
+                setConfirmingAbandon(false);
+                window.setTimeout(() => document.getElementById("abandon-trigger")?.focus(), 0);
+              }}
             >
               Keep Playing
             </button>

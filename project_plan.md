@@ -3,7 +3,7 @@
 > **Single Source of Truth:** This document tracks milestones, acceptance criteria, verification status, blockers, and session handoffs. Always read [GEMINI.md](./GEMINI.md) and this file at the start of every session.
 
 ## Project Status Overview
-- **Current Phase:** Milestone 5 Complete — Ready for **Milestone 6**
+- **Current Phase:** Milestone 6 Complete — all planned milestones done
 - **Completed Milestones:**
   - Milestone 0 (Planning & Architecture Docs)
   - Milestone 1 (App Foundation, Mat Settings, Visual Direction & Responsive Shell)
@@ -11,6 +11,7 @@
   - Milestone 3 (Putting Ladder Game)
   - Milestone 4 (Pace Control Game)
   - Milestone 5 (Session History, Comparable Personal Bests & Data Export/Import)
+  - Milestone 6 (Accessibility Audit, Polish & Deployment Preparation)
 - **Active Blockers:** None
 
 ---
@@ -145,7 +146,7 @@
 ---
 
 ### Milestone 6: Accessibility Audit, Polish & Deployment Preparation
-- **Status:** PENDING
+- **Status:** COMPLETED (2026-11-12)
 - **Scope:**
   - Keyboard navigation, focus management, ARIA live announcements, contrast & reduced-motion verification.
   - Clearly labeled optional Demo Data preview mode (strictly isolated from real saved history).
@@ -153,6 +154,14 @@
 - **Acceptance Criteria:**
   - Full test suite, typecheck, and production build pass with zero warnings/errors.
   - Browser verification across mobile/desktop viewports and production preview (`vite preview`).
+- **Verification Record:**
+  - `npm run typecheck` — passed. `npm test` — 7 files, 62 tests passed (new `demoData.test.ts`: demo sessions cover all modes, deterministic, pass the real import validator, `demo_` ids; announcement text for log/complete/undo/close). `npm run build` — passed, no warnings (relative asset URLs in `dist/index.html`).
+  - Browser on `vite preview` (`http://localhost:4173/`), mobile `375x812` and the pane's desktop width (~800px; a true 1280px viewport was **not** tested): tab arrow/Home/End/wrap keys move focus and selection; only the selected tab has `aria-controls` (-> existing `#main-tabpanel`); focus moves to the new view heading on setup/start/summary/undo-reopen/abandon; abandon confirm focuses "Keep Playing" and restores focus to Abandon; history delete confirm focuses "Keep", Keep restores "Delete", delete/import move focus to the status notice; invalid import focuses the error, Dismiss returns to the Import button, valid import focuses the preview; live region announced start, each putt, undo, completion, reopen and close; no horizontal overflow at 375px; demo preview showed 10 rows labelled DEMO SAMPLE, left `localStorage` untouched (null), disabled export/import/delete, and reset on leaving the tab.
+  - Contrast (computed): body/secondary/muted text >= 5.2:1 on all surfaces, white on accent 11:1, warning/danger/success text >= 9.3:1. All component colours use tokens.
+- **Design notes:**
+  - Demo data lives only in React state (`buildDemoHistory`), is passed to the History panel in place of real history, and is never given to the storage service or export. Activity announcements are derived centrally in `App.tsx` from active-session changes (`src/domain/announcements.ts`); the per-banner `aria-live` was removed to avoid double announcements.
+  - `vite.config.ts` uses `base: './'`; no router, so `dist/` can be hosted anywhere static.
+- **Known issues / not verified:** `prefers-reduced-motion` verified by code review (global CSS override) only, not toggled in the browser; no real screen reader (NVDA/VoiceOver) test; true 1280px desktop and real OS file picker not exercised; the one-tab-panel-at-a-time pattern means inactive tabs have no `aria-controls`.
 
 ---
 
@@ -216,12 +225,10 @@
 - **What is finished:** `historyView.ts` (filter/sort/PB grouping), `dataTransfer.ts` (export payload, in-memory import validation + preview), `SettingsStorageService.deleteCompletedSession` / `replaceWithImportedData`, `HistoryDataPanel.tsx`, third header tab "History & Data", updated footer backup text, CSS, tests.
 - **What was actually verified:** typecheck, 58/58 tests, build; browser flow as recorded under Milestone 5.
 - **Known issues or blockers:** None.
-- **Next exact prompt (Milestone 6):**
+- **Known issues or blockers:** None.
 
-> First read GEMINI.md, project_plan.md, and architecture.md in full and follow all conventions in GEMINI.md. Inspect the existing code in src/ to match patterns from Milestones 1–5.
->
-> Implement Milestone 6 (Accessibility Audit, Polish & Deployment Preparation) only:
-> 1. Audit and fix keyboard navigation (tablist arrow-key support and `aria-controls` targets that exist), focus management (move focus sensibly after view changes, delete confirm, import preview/error), ARIA live announcements for logging/undo/completion, colour contrast, and `prefers-reduced-motion`.
-> 2. Add an optional, clearly labelled Demo Data preview mode strictly isolated from real saved history (never written to the real storage key and never included in export).
-> 3. Add a concise README.md and static-hosting configuration (relative base path, build/preview instructions).
-> 4. Run npm run typecheck, npm test, npm run build with zero warnings, and verify in the browser on mobile and desktop viewports plus `vite preview`. Update project_plan.md and report any remaining known issues.
+### Session 7 (2026-11-12) — Milestone 6 Implementation
+- **What is finished:** Tab keyboard support and valid `aria-controls`, focus management, central live announcements, Demo Data preview (isolated), `README.md`, relative `base`, favicon, tests.
+- **What was actually verified:** typecheck, 62/62 tests, build; browser flow as recorded under Milestone 6.
+- **Known issues:** see Milestone 6. Nothing committed yet.
+- **Next:** No milestone remains; optional follow-ups are a real screen-reader pass and a deploy to a chosen host.

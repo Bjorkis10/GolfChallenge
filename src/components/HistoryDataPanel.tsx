@@ -1,4 +1,4 @@
-import { ChangeEvent, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   GAME_MODE_LABELS,
   HistoryFilter,
@@ -28,6 +28,8 @@ interface HistoryDataPanelProps {
   readonly settings: MatSettings;
   readonly history: readonly CompletedSessionRecord[];
   readonly activeSession: ActiveSessionState | null;
+  readonly demoMode: boolean;
+  readonly onToggleDemoMode: (next: boolean) => void;
   readonly onDeleteSession: (sessionId: string) => HistoryActionResult;
   readonly onImportData: (
     settings: MatSettings,
@@ -148,6 +150,8 @@ export function HistoryDataPanel({
   settings,
   history,
   activeSession,
+  demoMode,
+  onToggleDemoMode,
   onDeleteSession,
   onImportData,
 }: HistoryDataPanelProps) {
@@ -160,6 +164,16 @@ export function HistoryDataPanel({
   const [importResult, setImportResult] = useState<ImportValidationResult | null>(null);
   const [importFileName, setImportFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Move focus to a named element after the next render (keyboard / screen-reader users).
+  const pendingFocusId = useRef<string | null>(null);
+  useEffect(() => {
+    if (pendingFocusId.current) {
+      const el = document.getElementById(pendingFocusId.current);
+      pendingFocusId.current = null;
+      el?.focus();
+    }
+  });
 
   const visible = useMemo(
     () => sortNewestFirst(filterHistoryByMode(history, filter)),
@@ -191,14 +205,18 @@ export function HistoryDataPanel({
     setNotice(null);
     try {
       const text = await file.text();
-      setImportResult(validateImportText(text));
+      const result = validateImportText(text);
+      setImportResult(result);
+      pendingFocusId.current = result.valid ? 'import-preview' : 'import-error';
     } catch {
       setImportResult({ valid: false, errors: ['The file could not be read.'] });
+      pendingFocusId.current = 'import-error';
     }
     setImportFileName(file.name);
   };
 
   const cancelImport = () => {
+    pendingFocusId.current = 'import-button';
     setImportResult(null);
     setImportFileName(null);
   };
@@ -206,6 +224,7 @@ export function HistoryDataPanel({
   const confirmImport = () => {
     if (!importResult?.valid || !importResult.settings || !importResult.history) return;
     const result = onImportData(importResult.settings, importResult.history);
+    pendingFocusId.current = 'history-notice';
     setImportResult(null);
     setImportFileName(null);
     setExpandedId(null);
@@ -220,6 +239,7 @@ export function HistoryDataPanel({
 
   const handleDelete = (sessionId: string) => {
     const result = onDeleteSession(sessionId);
+    pendingFocusId.current = 'history-notice';
     setConfirmDeleteId(null);
     if (expandedId === sessionId) setExpandedId(null);
     setNotice({
@@ -244,12 +264,45 @@ export function HistoryDataPanel({
 
       {notice ? (
         <p
+          id="history-notice"
+          tabIndex={-1}
           className={`feedback-msg ${notice.kind === 'error' ? 'feedback-msg--error' : 'feedback-msg--success'}`}
           role={notice.kind === 'error' ? 'alert' : 'status'}
         >
           {notice.text}
         </p>
       ) : null}
+
+      <div className={demoMode ? 'status-banner' : 'rules-explainer-box'}>
+        <h3 className="rules-explainer-box__title">
+          {demoMode ? 'Demo data preview — not your sessions' : 'Demo data preview (optional)'}
+        </h3>
+        <p style={{ marginBottom: 0 }}>
+          {demoMode
+            ? 'You are looking at made-up sample sessions so you can explore this screen. They are kept in memory only: never saved to your browser storage, never part of an export, and gone when you leave this tab or reload. Export, import and delete are turned off while previewing.'
+            : 'Want to see what history and personal bests look like? Preview made-up sample sessions here. Your real saved history is not touched.'}
+        </p>
+        <div className="summary-actions-row">
+          <button
+            type="button"
+            className="btn btn--secondary"
+            aria-pressed={demoMode}
+            onClick={() => {
+              setExpandedId(null);
+              setConfirmDeleteId(null);
+              setNotice({
+                kind: 'success',
+                text: demoMode
+                  ? 'Demo preview off. Showing your real history.'
+                  : 'Demo preview on. These are sample sessions, not your real history.',
+              });
+              onToggleDemoMode(!demoMode);
+            }}
+          >
+            {demoMode ? 'Exit demo preview' : 'Preview with demo data'}
+          </button>
+        </div>
+      </div>
 
       <div className="rules-explainer-box">
         <h3 className="rules-explainer-box__title">Backup &amp; restore</h3>
@@ -260,12 +313,19 @@ export function HistoryDataPanel({
           regularly and keep it somewhere safe.
         </p>
         <div className="summary-actions-row">
-          <button type="button" className="btn btn--primary" onClick={handleExport}>
+          <button
+            type="button"
+            className="btn btn--primary"
+            disabled={demoMode}
+            onClick={handleExport}
+          >
             Export JSON backup
           </button>
           <button
             type="button"
+            id="import-button"
             className="btn btn--secondary"
+            disabled={demoMode}
             onClick={() => fileInputRef.current?.click()}
           >
             Import JSON backup…
@@ -283,7 +343,7 @@ export function HistoryDataPanel({
       </div>
 
       {importResult && !importResult.valid ? (
-        <div className="feedback-msg feedback-msg--error" role="alert">
+        <div id="import-error" tabIndex={-1} className="feedback-msg feedback-msg--error" role="alert">
           <strong>Import rejected{importFileName ? ` (${importFileName})` : ''}.</strong>{' '}
           Your saved data was not changed.
           <ul style={{ margin: '4px 0 0', paddingLeft: '1.25rem' }}>
@@ -300,7 +360,7 @@ export function HistoryDataPanel({
       ) : null}
 
       {importResult?.valid && preview ? (
-        <div className="undo-reopen-bar" role="region" aria-label="Import preview">
+        <div id="import-preview" tabIndex={-1} className="undo-reopen-bar" role="region" aria-label="Import preview">
           <div style={{ flex: 1, minWidth: 220 }}>
             <strong>Import preview{importFileName ? ` — ${importFileName}` : ''}</strong>
             <ul style={{ margin: '4px 0 0', paddingLeft: '1.25rem' }}>
@@ -353,7 +413,10 @@ export function HistoryDataPanel({
               <li key={group.configKey} className="history-item">
                 <div className="history-item__head">
                   <div>
-                    <span className="eyebrow-label">{GAME_MODE_LABELS[group.mode]}</span>
+                    <span className="eyebrow-label">
+                      {demoMode ? 'DEMO SAMPLE • ' : ''}
+                      {GAME_MODE_LABELS[group.mode]}
+                    </span>
                     <strong>{describeRecordScore(group.best)}</strong>
                     <div className="field-group__hint" style={{ marginBottom: 0 }}>
                       {describeRecordConfig(group.best)}
@@ -409,7 +472,10 @@ export function HistoryDataPanel({
                 <li key={record.sessionId} className="history-item">
                   <div className="history-item__head">
                     <div>
-                      <span className="eyebrow-label">{GAME_MODE_LABELS[record.mode]}</span>
+                      <span className="eyebrow-label">
+                        {demoMode ? 'DEMO SAMPLE • ' : ''}
+                        {GAME_MODE_LABELS[record.mode]}
+                      </span>
                       <strong>{describeRecordScore(record)}</strong>
                       {isPb ? (
                         <span className="badge-available" style={{ marginLeft: 8 }}>
@@ -449,7 +515,11 @@ export function HistoryDataPanel({
                         <button
                           type="button"
                           className="btn btn--secondary btn--sm"
-                          onClick={() => setConfirmDeleteId(null)}
+                          id={`keep-${record.sessionId}`}
+                          onClick={() => {
+                            pendingFocusId.current = `delete-${record.sessionId}`;
+                            setConfirmDeleteId(null);
+                          }}
                         >
                           Keep
                         </button>
@@ -458,8 +528,12 @@ export function HistoryDataPanel({
                       <button
                         type="button"
                         className="btn btn--secondary btn--sm"
-                        disabled={isActive}
-                        onClick={() => setConfirmDeleteId(record.sessionId)}
+                        id={`delete-${record.sessionId}`}
+                        disabled={isActive || demoMode}
+                        onClick={() => {
+                          pendingFocusId.current = `keep-${record.sessionId}`;
+                          setConfirmDeleteId(record.sessionId);
+                        }}
                       >
                         Delete
                       </button>
